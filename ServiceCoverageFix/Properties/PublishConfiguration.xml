@@ -1,0 +1,31 @@
+﻿<Publish>
+	<!--Id must be set in order to update existed mod. it is not required for publishing mod for the first time-->
+	<ModId Value="" />
+	<!--Name of the mod to display to players-->
+	<DisplayName Value="ServiceCoverageFix" />
+	<!--Short description of the mod-->
+	<ShortDescription Value="Removes the deterministic service-coverage merge stutter without changing coverage results." />
+	<!--Long description of the mod. Single line or multi line. Supports minimal markdown subset-->
+	<LongDescription>
+Replaces a pathological linear-reinsertion merge in ServiceCoverageSystem with an equivalent monotone radix-queue merge and a binary-heap safety fallback. This build is locked to the analyzed Game.dll and fails closed on incompatible game versions.
+	</LongDescription>
+	<!--Thumbnail-->
+	<Thumbnail Value="Properties/Thumbnail.png" />
+	<!--Screenshot, can be set multiple times-->
+	<!--Screenshot and ForumLink can be added before public release.-->
+	<Tag Value="Code Mod" />
+	<!--Version of the mod-->
+	<ModVersion Value="0.1.4" />
+	<!--Recommended version of the base game to use the mod-->
+	<GameVersion Value="*" />
+	<!--No external mod dependency. Harmony is packaged privately with this mod.-->
+	<!--No DLC is required.-->
+	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
+	<ChangeLog Value="Replaced the remaining O(E log B) heap bottleneck with an exact monotone radix queue after post-fix ETW validation." />
+	<!--<ChangeLog>
+	</ChangeLog>-->
+	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
+	<!--External links can be added before public release.-->
+	<!--Supported values Public, Private, Unlisted-->
+	<AccessLevel Value="Private" />
+</Publish>
