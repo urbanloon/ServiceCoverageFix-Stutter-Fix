@@ -20,16 +20,11 @@ The radix path validates the per-provider monotone ordering and rejects NaNs
 before making any coverage writes. If either invariant is ever absent, that
 invocation uses the proven v0.1.3 binary heap instead.
 
-The mod has no settings. The template's generated options page was intentionally
-removed because there is no safe or useful runtime tuning knob.
-
 The C# sources have been compiled successfully against the exact supplied game,
 Unity, Colossal, and Harmony 2.2.2 assemblies. Harmony is copied into the local
 mod output by this project; the old CS2 DependencyPack subscription is not
 required. Version 2.2.2 is used because CS2's Burst 1.8.23 build step cannot
-parse Harmony 2.4.2's newer merged assembly format. The mod DLL still needs the
-official template's normal post-build processing before an in-game test;
-building this solution performs that step and deploys it to the game's local
+parse Harmony 2.4.2's newer merged assembly format. Building this solution performs that step and deploys it to the game's local
 `Mods` folder.
 
 ## Compatibility and failure behavior
