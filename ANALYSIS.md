@@ -1,5 +1,13 @@
 # Cities: Skylines II periodic-stutter investigation
 
+## Version-history note
+
+The published source progression is **0.1.8 to 0.3.2**. The complete original
+0.1.8 source is preserved in commit `95121ee` and on the `archive-v0.1.8`
+branch. Labels such as 0.1.9, 0.2.0, and 0.3.1 below identify unpublished
+development experiments, not public releases. In particular, there was no
+published or tested 0.3.1 build.
+
 ## Result
 
 The sampled native work is the AVX2 Burst implementation of:
@@ -140,15 +148,15 @@ any coverage writes. The next largest pass is PostService at 193 providers and
 the exact hash-locked game build and reports how many elements the radix merge
 actually processes before provider budgets are exhausted.
 
-## v0.1.9 cached-radix refill optimization
+## Unpublished 0.1.9 cached-radix experiment
 
 The v0.1.8 native fast path still performs two linked-list traversals whenever
 radix bucket zero is empty: the first finds the minimum priority in the next
 nonempty bucket, and the second redistributes that bucket around the new radix
 base. It also searches bucket headers linearly to locate that source bucket.
 
-Version 0.1.9 maintains the minimum priority of each bucket as records are
-inserted and tracks nonempty buckets in a 33-bit mask. A refill obtains the
+The unpublished 0.1.9 experiment maintains the minimum priority of each bucket
+as records are inserted and tracks nonempty buckets in a 33-bit mask. A refill obtains the
 source bucket with a trailing-zero count and reads its cached minimum, then
 performs only the required redistribution traversal. The queue representation,
 priority transform, prepend-on-reinsertion rule, append-on-redistribution rule,
@@ -160,22 +168,24 @@ tie-heavy, arbitrary-initial-order, float32, infinity, subnormal, signed-zero,
 and adversarial cases. All selected provider/priority sequences remain exactly
 equal. In synthetic workloads sized like the observed 421-provider/427,000-
 element and 526-provider/510,000-element Park passes, caching removes one of
-the two source-list walks—approximately 1.8 to 2.2 million linked-node visits.
+the two source-list walks, approximately 1.8 to 2.2 million linked-node visits.
 This is a bounded micro-optimization; the irreducible serial coverage math is
 still performed once for every processed element.
 
-## v0.2.0 compact hot-loop optimization
+## Unpublished 0.2.0 compact hot-loop experiment
 
-Version 0.1.9 stored each radix link and transformed priority in the otherwise
-unused eight-byte `Entity` field at the front of the 24-byte provider record.
+The unpublished 0.1.9 experiment stored each radix link and transformed
+priority in the otherwise unused eight-byte `Entity` field at the front of the
+24-byte provider record.
 That avoided an allocation, but queue traversal still touched the wide provider
 array and every selected element copied and rewrote all 24 bytes even though
 only `ElementIndex`, `ElementCount`, and sometimes `Remaining` change.
 
-Version 0.2.0 moves each link and priority into one dense eight-byte stack node.
-At the observed 526-provider scale the nodes occupy about 4.2 KB. Provider records
-are now updated in place through pointers, and the unchanged `Entity` and
-`Total` fields are no longer moved through the half-million-iteration loop.
+The unpublished 0.2.0 experiment moves each link and priority into one dense
+eight-byte stack node. At the observed 526-provider scale the nodes occupy about
+4.2 KB. Provider records are now updated in place through pointers, and the
+unchanged `Entity` and `Total` fields are no longer moved through the
+half-million-iteration loop.
 The diagnostic processed count is computed from provider-sized sums before and
 after the merge instead of incrementing a loop-carried counter once per
 element. Bucket selection and the sortable float-key conversion were also
@@ -444,7 +454,7 @@ removing maintenance depots alone: the save analysis proved the 524–533 heavy
 providers are the Park entities themselves. The test must be performed on a
 disposable copy and not saved over the original city.
 
-## v0.3.1 maximum exact Apply redesign
+## Unpublished four-level byte-radix design study
 
 The two v0.1.4 post-fix traces were reclassified by native instruction region,
 using the exact replacement DLL rather than neighboring strings. Across 416
@@ -461,8 +471,8 @@ This makes another selector redesign substantially higher value than changing
 the coverage formula. The latter would also risk changing observable float
 results for only a small sampled block.
 
-Version 0.3.1 uses an exact four-level byte-radix queue. A provider can be
-redistributed at most once per differing key byte rather than once per bit.
+The unpublished design uses an exact four-level byte-radix queue. A provider
+can be redistributed at most once per differing key byte rather than once per bit.
 There are 1,025 logical buckets: bucket zero plus 256 buckets for each of four
 byte positions. A 17-word occupancy bitmap and 17-bit word directory locate the
 next live source in constant time. Cached minima avoid a preliminary linked-list
@@ -488,9 +498,9 @@ large-provider heap fallback.
 The exact selector microbenchmark uses the two measured heavy sizes
 (421/427,319 and 526/510,220), four monotone stream shapes, physical provider
 range shuffling, the real 32-byte key stride, full sequence validation, and 41
-randomized-order measurement rounds. The exact implemented configuration—byte
-radix, adaptive 4,096/5% batching, 16-byte AoS provider state, and no unavailable
-prefetch intrinsic—is 1.404x faster geometrically than the v0.2 selector,
+randomized-order measurement rounds. The tested configuration uses byte radix,
+adaptive 4,096/5% batching, 16-byte AoS provider state, and no unavailable
+prefetch intrinsic. It is 1.404x faster geometrically than the unpublished 0.2.0 selector,
 ranging from 1.165x to 2.013x. Every workload's paired confidence interval
 remains above 1.0. The high-interleave cases measure 1.173x and 1.165x; the
 vanilla shift-loop pathology is direct evidence that the real Park merge is
@@ -498,8 +508,8 @@ strongly interleaved. These figures isolate selector time and are not claimed
 as total job or frame-time speedups.
 
 Full same-provider batching is exact but can itself be too expensive on an
-interleaved stream. Version 0.3.1 always takes the constant-time equal-key path,
-then samples the first 4,096 non-equal advances. The broader competitor-minimum
+interleaved stream. The four-level design always takes the constant-time
+equal-key path, then samples the first 4,096 non-equal advances. The broader competitor-minimum
 peek stays enabled only at a hit rate of at least 5%. In the benchmark that
 disabled it for the two high-interleave streams (59 and 49 hits), while retaining
 it for mixed and run-heavy streams (1,961–4,096 hits). This decision changes only
@@ -552,8 +562,8 @@ modded coverage magnitude to finite values. A NaN `AverageCoverage` makes the
 vanilla comparer itself non-antisymmetric: both `Compare(NaN, x)` and
 `Compare(x, NaN)` can return `-1`. Consequently no total integer key can promise
 the same undefined NativeSort permutation for hostile NaN prefab data without a
-full validation/fallback scan. Version 0.3.1 deliberately avoids that million-
-element scan and guarantees ordering equivalence for valid finite coverage
+full validation/fallback scan. The four-level design deliberately avoids that
+million-element scan and guarantees ordering equivalence for valid finite coverage
 inputs. Infinity remains ordered; NaN authored data is the excluded case.
 
 ### Guarded cross-version behavior
@@ -567,18 +577,14 @@ build still fails closed and leaves the original job untouched. A structurally
 compatible but unverified build displays a visible compatibility warning that
 includes its `Game.dll` hash, then enables the replacement normally.
 
-## v0.3.2 record-local hardening
+## v0.3.2 published record-local implementation
 
-During extended v0.3.1 testing, the game produced one native crash after roughly
-27 minutes. The collected report had an empty managed stack and contained no
-native dump, fault address, faulting module, Windows Application Error event, or
-Windows Error Reporting record. It therefore cannot attribute the crash to the
-mod, the game, another native mod, Unity, or the graphics driver.
-
-Version 0.3.2 nevertheless removes v0.3.1's most aggressive implementation
-choice. Instead of compacting all 24-byte records into a contiguous 16-byte
-state array and placing a separate node array in the reclaimed tail, every
-original record is independently overlaid as:
+The cross-record compaction layout described in the unpublished design study
+was not published or tested as a 0.3.1 build. The published 0.3.2 implementation
+uses the four-level byte-radix selector while deliberately rejecting that
+cross-record layout. Instead of compacting all 24-byte records into a contiguous
+16-byte state array and placing a separate node array in the reclaimed tail,
+every original record is independently overlaid as:
 
 ```text
 byte  0..7   RadixNode { Next, Priority }
@@ -592,6 +598,7 @@ and uses the same four-level byte-radix selection, cached minima, occupancy
 directory, exact tie behavior, and adaptive winner batching. Coverage writes,
 floating-point arithmetic, and serial ordering remain unchanged.
 
-This hardening is deliberately treated as a new test build rather than proof
-that the unattributed crash was caused or fixed. A Release/Burst compilation
-and extended live test are required before publication.
+This is the record-local layout shipped in the published 0.3.2 build. The
+reference suite verifies its structural bounds and exact provider-selection
+sequence, and the release was subjected to extended in-game testing before
+publication.
