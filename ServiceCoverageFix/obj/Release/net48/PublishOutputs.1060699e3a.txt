@@ -1,3 +1,0 @@
-D:\ServiceCoverageFix\bin\Release\net48\THIRD_PARTY_NOTICES.txt
-D:\ServiceCoverageFix\bin\Release\net48\ServiceCoverageFix.dll
-D:\ServiceCoverageFix\bin\Release\net48\ServiceCoverageFix.pdb
