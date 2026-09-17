@@ -17,7 +17,7 @@
 
 		The mod does not skip coverage updates, reduce their frequency, approximate calculations, or add custom save data. It can be removed safely to restore the original game implementation.
 
-		Unverified game versions receive a compatibility warning. The mod will only enable when the required job, fields, memory layouts, and scheduling call remain structurally compatible. Otherwise, it fails closed and leaves the vanilla job untouched.
+		Version 0.3.3 retains that optimization unchanged and replaces version-only popups with compatibility-contract checks. Matching field types, sizes and offsets, reviewed coverage job/comparer code, and the allocation/scheduling/disposal method are required. A different overall Game.dll hash alone does not cause a popup. An actual mismatch disables the fix and reports the reason; ordinary successful startup is logged without a popup.
 
 		Harmony 2.2.2 is packaged privately. No external dependency or DLC is required.
 	</LongDescription>
@@ -29,11 +29,11 @@
 	<Tag Value="Code Mod" />
 
 	<!-- Version -->
-	<ModVersion Value="0.3.2" />
+	<ModVersion Value="0.3.3" />
 	<GameVersion Value="*" />
 
-	<!-- Changes from the currently published 0.1.8 version -->
-	<ChangeLog Value="Replaces the 33-bucket selector with a faster four-stage byte-radix queue using direct occupied-bucket lookup, cached minima, repeated-winner batching, and a hardened record-local memory layout. Removes diagnostic logging and the park-deletion test hotkey. Adds guarded compatibility support for unverified game versions." />
+	<!-- Compatibility-only update; the existing optimizer is unchanged. -->
+	<ChangeLog Value="Removes version-only compatibility popups. Adds exact field-offset/type checks and token-independent fingerprints of the coverage job, comparers and scheduling/disposal code. Real incompatibilities still disable the fix with an error. Coverage optimization and Harmony 2.2.2 remain unchanged." />
 
 	<!-- Supported values: Public, Private, Unlisted -->
 	<AccessLevel Value="Public" />

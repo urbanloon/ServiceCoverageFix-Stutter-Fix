@@ -4,7 +4,7 @@
     <Configurations>Debug;Release</Configurations>
     <AssemblyName>ServiceCoverageFix</AssemblyName>
     <RootNamespace>ServiceCoverageFix</RootNamespace>
-    <Version>0.3.2</Version>
+    <Version>0.3.3</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -47,6 +47,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
     <None Include="$(ModPropsFile)" Link="Properties\Mod.props" />
     <None Include="$(ModTargetsFile)" Link="Properties\Mod.targets" />
     <None Update="THIRD_PARTY_NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
