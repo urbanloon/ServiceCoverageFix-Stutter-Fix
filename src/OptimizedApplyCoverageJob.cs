@@ -56,8 +56,8 @@ namespace ServiceCoverageFix
     }
 
     // Keep every queue node and provider state inside its own original 24-byte
-    // BuildingData record. This avoids the cross-record compaction used by
-    // v0.3.1 while still requiring no allocation and no worker-stack-sized
+    // BuildingData record. This avoids the discarded cross-record compaction
+    // prototype while still requiring no allocation and no worker-stack-sized
     // provider array. The Entity field is disposable at this stage, so its
     // first eight bytes become the queue node; the remaining sixteen bytes
     // already have the exact shape needed by ProviderState after ElementCount
@@ -105,9 +105,9 @@ namespace ServiceCoverageFix
             // Both temporary lists are disposed immediately after this job and no
             // downstream job reads these records. Reinterpret each independent
             // 24-byte record as one 8-byte queue node plus one 16-byte hot state.
-            // Unlike v0.3.1, no write crosses a record boundary. This retains the
-            // allocation-free queue and removes the most aggressive memory-layout
-            // transformation from the native job.
+            // Unlike the discarded compaction prototype, no write crosses a
+            // record boundary. This retains the allocation-free queue and removes
+            // the most aggressive memory-layout transformation from the native job.
             ProviderSlot* slots = (ProviderSlot*)records;
             InitializeSlots(slots, recordCount);
 
