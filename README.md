@@ -36,16 +36,18 @@ development benchmark harness. Measurements derived from those artifacts are
 reported here and in the analysis documents, but the underlying artifacts are
 not archived in this repository.
 
-## Source update: 0.3.3
+## Latest release: 0.3.3
 
 Removes the compatibility error popup when a different game build passes all
 structural and scheduling checks. The build hash is logged at information level.
 Actual loading failures still report errors. Coverage logic is unchanged from
-0.3.2. This source update must be rebuilt and published to update installed mods.
+0.3.2. Published to the existing Paradox Mods listing on November 11, 2026.
+The Release build and publication completed successfully; the reference-model
+and stress-test suite also passed.
 
 ## Public version history
 
-The public source progression is **0.1.8 to 0.3.2**.
+The public source progression is **0.1.8 → 0.3.2 → 0.3.3**.
 
 - **0.1.8** was the first published source build. It replaced the vanilla
   sorted-array reinsertion loop with an exact 33-bucket monotone radix queue and
@@ -55,9 +57,13 @@ The public source progression is **0.1.8 to 0.3.2**.
   [`953bf61`](https://github.com/urbanloon/ServiceCoverageFix-Stutter-Fix/tree/953bf61/ServiceCoverageFix).
   The older `v0.1.8` tag predates the source upload and is not the authoritative
   source snapshot.
-- **0.3.2** is the current published build. It replaces the 33-bucket selector
-  with a four-level byte-radix selector, removes the diagnostic controls, and
-  uses a record-local temporary-memory layout.
+- **0.3.2** replaced the 33-bucket selector
+  with a four-level byte-radix selector, removed the diagnostic controls, and
+  introduced a record-local temporary-memory layout.
+- **0.3.3** is the current published build. It removes the compatibility error
+  popup by logging game-build differences at information level. Structural
+  checks, genuine error reporting, and the 0.3.2 coverage implementation remain
+  unchanged.
 
 No build bearing version 0.3.1 was published or tested in game. Constituent
 design ideas were evaluated in unpublished model and benchmark prototypes before
