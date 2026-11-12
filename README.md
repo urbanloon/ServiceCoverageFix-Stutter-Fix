@@ -339,10 +339,11 @@ ratio calculation, remaining-budget update, and floating-point operation order.
 
 For non-NaN `AverageCoverage`, the queue maintains these invariants:
 
-1. `lastPriority` is a monotone lower bound installed by the most recent
-   bucket-zero refill. Every queued key, and the temporarily selected provider's
-   next key, is greater than or equal to that lower bound. During direct winner
-   batching, the stored variable may lag the latest processed key.
+1. `lastPriority` is initialized to zero and thereafter becomes the monotone
+   lower bound installed by each bucket-zero refill. Every queued key, and the
+   temporarily selected provider's next key, is greater than or equal to that
+   lower bound. During direct winner batching, the stored variable may lag the
+   latest processed key.
 2. Relative to the same `lastPriority`, a key in a lower differing-byte band
    precedes every key in a higher band. Within one band, a lower byte digit
    precedes a higher digit.
@@ -387,10 +388,11 @@ the post-sort merge sequence as follows:
 
 The reference suite compares every selected `(provider, element)` pair after a
 concrete initial order has been supplied, not only the final numeric result. It
-proves that the radix merge preserves vanilla reinsertion and tie behavior from
-that point forward. It does not execute Unity's compiled sort or independently
-prove the concrete permutation that `NativeList.Sort` chooses among initial
-equal keys.
+verifies vanilla reinsertion and tie behavior across its exhaustive small-domain,
+randomized, edge, and stress cases. The invariants above provide the general
+equivalence argument from the supplied post-sort order. The suite does not
+execute Unity's compiled sort or independently prove the concrete permutation
+that `NativeList.Sort` chooses among initial equal keys.
 
 ### Exact adaptive winner batching
 
