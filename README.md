@@ -36,6 +36,37 @@ development benchmark harness. Measurements derived from those artifacts are
 reported here and in the analysis documents, but the underlying artifacts are
 not archived in this repository.
 
+## Candidate: 0.3.4
+
+This branch adds execution verification. It has not been published to Paradox Mods.
+
+- Startup checks the exact field types and offsets of the provider, coverage
+  element, and target coverage structs, then exercises the real field-access
+  bridge with isolated zero-, one-, and two-provider jobs. The probes must
+  complete and produce the expected coverage before the patch is installed.
+- The replacement worker records starts, completions, and managed execution in
+  a separate native counter allocation. `BurstDiscard` distinguishes managed
+  execution from Burst execution. Probes do not contribute to live counters.
+- Every scheduling fallback is counted and its latest exception retained.
+  Successful startup is described as installation, not proof of live execution.
+- **Options → Service Coverage Stutter Fix → Diagnostics** exposes the state,
+  counters, and last fallback error. Reopen the panel to refresh. Diagnostic tools
+  can also call `ServiceCoverageFix.Mod.GetRuntimeStatus()` without reading logs.
+- Counter writes occur once per job entry/exit, never per element. Counter memory
+  is released only after tracked jobs complete. Normal scheduling only reclaims
+  already-finished handles; it does not block on outstanding coverage work.
+
+The state reports observations since load: a managed execution or fallback
+remains visible even if later jobs succeed. Counts include empty coverage jobs.
+A completion confirms execution, not acceptable frame time. Live counter reads
+are atomic individually, not a synchronized snapshot of all workers.
+
+Coverage arithmetic, provider selection, tie order, and game dependencies are
+unchanged. Prepare, Clear, and Process coverage stages remain vanilla. This is
+an execution-verification candidate, not a confirmed fix for the reported stalls.
+Unity/Burst compilation, Options-panel rendering, and execution in a real city
+still require in-game verification.
+
 ## Latest release: 0.3.3
 
 Removes the compatibility error popup when a different game build passes all
@@ -618,18 +649,20 @@ Version 0.3.2 was verified against `Game.dll` SHA-256:
 
 `721e7e17bf74299aa2b988c1bd07e90874bb8bc72d263229500c4bf639e7e4ee`
 
-The startup path verifies that:
+The 0.3.4 candidate startup path verifies that:
 
 - `Game.Simulation.ServiceCoverageSystem` exists;
 - its nested `ApplyCoverageJob` exists with the expected full name;
 - `m_BuildingData` and `m_Elements` are `NativeList<T>` fields;
 - their element type names remain `BuildingData` and `CoverageElement`;
 - their element types remain 24 and 32 bytes respectively;
+- internal field types and offsets match the replacement, including the target coverage field;
+- isolated bridge probes execute and produce expected coverage;
 - exactly one matching `Schedule<ApplyCoverageJob>` call is replaced.
 
 These are defensive structural checks, not proof that an unknown future build
-is semantically compatible. The current gate does not reflect over every
-internal element field type or offset. In 0.3.3, a different game hash is recorded at information level after the
+is semantically compatible. The 0.3.3 gate checked names and sizes; the 0.3.4 candidate additionally checks
+internal element field types and offsets and runs isolated execution probes. In 0.3.3, a different game hash is recorded at information level after the
 listed checks pass, without a compatibility popup. This does not certify an
 unknown build's behavior. If a listed
 check fails, the mod fails closed during loading and removes its patch.
@@ -650,7 +683,7 @@ mod. Its notice is retained in
 2. Select **Release** and choose **Build > Rebuild Solution**.
 3. Confirm `1 succeeded, 0 failed` and that the load message begins with:
 
-   `Enabled ServiceCoverageFix 0.3.3.0 record-local byte-radix hardened build`
+   `Installed ServiceCoverageFix 0.3.4.0; bridge preflight passed; awaiting live coverage execution`
 
 4. Run:
 
@@ -658,8 +691,24 @@ mod. Its notice is retained in
    python tests/reference_model.py
    ```
 
-5. Complete an extended in-game simulation test before publishing a changed
-   build.
+5. With .NET 8 installed, run the bridge/lifecycle harness:
+
+   ```text
+   dotnet run --project tests/runtime_harness/RuntimeHarness.csproj -p:GameManagedPath="PATH/TO/Cities2_Data/Managed"
+   ```
+
+   This executes production bridge, job, and diagnostic code against test-only
+   collection/scheduler adapters and the game's mathematics library. It covers
+   failed field validation, deferred execution, managed detection, repeated
+   fallback, single scheduling, unload, reload, and native allocation lifetime.
+   It does not validate Harmony installation, Burst output, or Unity scheduling.
+   Test adapters are excluded from the mod project.
+
+6. Build through the official CS2 template, load a city, and inspect Diagnostics.
+   Check starts and completions increase, managed/fallback counts remain zero,
+   and unload/reload works. Test the panel and a deliberately induced fallback
+   in a development build. Repeat the affected scene's capture to determine
+   whether remaining stalls persist before publishing.
 
 For performance changes, repeat the same-scene capture and resolve samples to
 the exact replacement binary before changing another hot path. The next change
@@ -670,3 +719,4 @@ is theoretically possible.
 
 ServiceCoverageFix is licensed under the [MIT License](LICENSE).
 Third-party notices are retained in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+

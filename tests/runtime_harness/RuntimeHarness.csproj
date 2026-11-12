@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/OptimizedApplyCoverageJob.cs" Link="OptimizedApplyCoverageJob.cs" />
+    <Compile Include="../../src/RuntimeDiagnostics.cs" Link="RuntimeDiagnostics.cs" />
+    <Compile Include="../../src/ServiceCoverageSystemPatch.cs" Link="ServiceCoverageSystemPatch.cs" />
+    <Reference Include="Unity.Mathematics"><HintPath>$(GameManagedPath)/Unity.Mathematics.dll</HintPath></Reference>
+  </ItemGroup>
+  <Target Name="RequireGameMath" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(GameManagedPath)/Unity.Mathematics.dll')" Text="Set GameManagedPath to the game's Cities2_Data/Managed directory." />
+  </Target>
+</Project>
