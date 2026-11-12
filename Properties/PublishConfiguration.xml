@@ -1,0 +1,40 @@
+﻿<Publish>
+	<!-- Existing Paradox Mods listing -->
+	<ModId Value="157236" />
+
+	<!-- Mod information -->
+	<DisplayName Value="Service Coverage Stutter Fix" />
+	<ShortDescription Value="Fixes periodic service-coverage stutters without changing coverage results." />
+
+	<LongDescription>
+		Fixes periodic simulation stutters caused by ServiceCoverageSystem.ApplyCoverageJob in cities containing hundreds of service-coverage providers, particularly parks.
+
+		Vanilla Cities: Skylines II repeatedly moves provider records one position at a time while combining their coverage paths. With hundreds of providers and hundreds of thousands of coverage elements, this can produce severe rhythmic frame-time stalls.
+
+		ServiceCoverageFix replaces only this inefficient merge with an exact four-stage byte-radix queue. The same providers and coverage elements are processed in the same priority order, using the same coverage calculations, update frequency, stopping conditions, and serial write order.
+
+		Version 0.3.2 processes priorities one byte at a time, jumps directly to populated buckets, caches bucket minima, avoids unnecessary queue operations when the same provider will immediately win again, and keeps each provider's temporary queue information inside its own original record.
+
+		The mod does not skip coverage updates, reduce their frequency, approximate calculations, or add custom save data. It can be removed safely to restore the original game implementation.
+
+		Unverified game versions receive a compatibility warning. The mod will only enable when the required job, fields, memory layouts, and scheduling call remain structurally compatible. Otherwise, it fails closed and leaves the vanilla job untouched.
+
+		Harmony 2.2.2 is packaged privately. No external dependency or DLC is required.
+	</LongDescription>
+
+	<!-- Thumbnail -->
+	<Thumbnail Value="Properties/Thumbnail.png" />
+
+	<!-- Classification -->
+	<Tag Value="Code Mod" />
+
+	<!-- Version -->
+	<ModVersion Value="0.3.2" />
+	<GameVersion Value="*" />
+
+	<!-- Changes from the currently published 0.1.8 version -->
+	<ChangeLog Value="Replaces the 33-bucket selector with a faster four-stage byte-radix queue using direct occupied-bucket lookup, cached minima, repeated-winner batching, and a hardened record-local memory layout. Removes diagnostic logging and the park-deletion test hotkey. Adds guarded compatibility support for unverified game versions." />
+
+	<!-- Supported values: Public, Private, Unlisted -->
+	<AccessLevel Value="Public" />
+</Publish>
