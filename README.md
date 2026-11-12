@@ -105,7 +105,9 @@ itself more efficient:
   pointer, exposing independent memory work to the CPU.
 - Each original 24-byte temporary record independently stores its own 8-byte
   queue node and 16-byte provider state. No write crosses into another provider
-  record and no additional native allocation is required.
+  record. The job performs no allocator-backed or heap allocation. Its four
+  explicit radix tables reserve 12,436 bytes, about 12.1 KiB, of fixed temporary
+  worker-stack storage, independent of provider count.
 - Runtime coverage logging and the destructive park-removal test are removed
   from the published gameplay build.
 

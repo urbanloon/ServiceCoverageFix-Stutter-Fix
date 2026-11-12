@@ -593,10 +593,13 @@ byte  8..23  ProviderState { NextIndex, EndIndex, Total, Remaining }
 
 Only `ElementCount` is converted in place to an absolute `EndIndex`; the other
 three state fields already occupy their final offsets. Every write remains
-inside the same original record. The queue is still allocation-free, uncapped,
-and uses the same four-level byte-radix selection, cached minima, occupancy
-directory, exact tie behavior, and adaptive winner batching. Coverage writes,
-floating-point arithmetic, and serial ordering remain unchanged.
+inside the same original record. The queue performs no allocator-backed or heap
+allocation and remains uncapped by provider count. Its four explicit radix
+tables reserve 12,436 bytes, about 12.1 KiB, of fixed temporary worker-stack
+storage, independent of provider count. It uses the same four-level byte-radix
+selection, cached minima, occupancy directory, exact tie behavior, and adaptive
+winner batching. Coverage writes, floating-point arithmetic, and serial
+ordering remain unchanged.
 
 This is the record-local layout shipped in the published 0.3.2 build. The
 reference suite verifies its structural bounds and exact provider-selection

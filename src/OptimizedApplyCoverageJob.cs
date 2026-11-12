@@ -57,11 +57,11 @@ namespace ServiceCoverageFix
 
     // Keep every queue node and provider state inside its own original 24-byte
     // BuildingData record. This avoids the discarded cross-record compaction
-    // prototype while still requiring no allocation and no worker-stack-sized
-    // provider array. The Entity field is disposable at this stage, so its
-    // first eight bytes become the queue node; the remaining sixteen bytes
-    // already have the exact shape needed by ProviderState after ElementCount
-    // is converted to an absolute end index.
+    // prototype while requiring no allocator-backed or heap storage and no
+    // provider-sized worker-stack array. The Entity field is disposable at this
+    // stage, so its first eight bytes become the queue node; the remaining
+    // sixteen bytes already have the exact shape needed by ProviderState after
+    // ElementCount is converted to an absolute end index.
     [StructLayout(LayoutKind.Explicit, Size = 24)]
     internal struct ProviderSlot
     {
@@ -106,8 +106,8 @@ namespace ServiceCoverageFix
             // downstream job reads these records. Reinterpret each independent
             // 24-byte record as one 8-byte queue node plus one 16-byte hot state.
             // Unlike the discarded compaction prototype, no write crosses a
-            // record boundary. This retains the allocation-free queue and removes
-            // the most aggressive memory-layout transformation from the native job.
+            // record boundary. Queue nodes reuse the game's existing records
+            // rather than allocator-backed or heap storage.
             ProviderSlot* slots = (ProviderSlot*)records;
             InitializeSlots(slots, recordCount);
 
@@ -154,6 +154,8 @@ namespace ServiceCoverageFix
             [NoAlias] RawCoverageElement* elements,
             int recordCount)
         {
+            // Fixed scratch storage, independent of provider count:
+            // 3 * 1,025 * 4 bytes + 17 * 8 bytes = 12,436 bytes.
             int* heads = stackalloc int[ByteRadixBucketCount];
             int* tails = stackalloc int[ByteRadixBucketCount];
             uint* minimums = stackalloc uint[ByteRadixBucketCount];
