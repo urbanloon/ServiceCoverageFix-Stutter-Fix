@@ -573,9 +573,11 @@ but a different hash is no longer rejected by itself. The mod continues only
 after resolving `ServiceCoverageSystem.ApplyCoverageJob`, validating both
 `NativeList` fields and their 24/32-byte element layouts, and replacing exactly
 one matching `Schedule<ApplyCoverageJob>` call. A structurally incompatible
-build still fails closed and leaves the original job untouched. A structurally
-compatible but unverified build displays a visible compatibility warning that
-includes its `Game.dll` hash, then enables the replacement normally.
+build still fails closed and leaves the original job untouched. In 0.3.2, a structurally
+compatible but unverified build displayed a visible compatibility warning that
+included its `Game.dll` hash, then enabled the replacement normally. Version
+0.3.3 records that build difference at information level without a popup;
+structural checks, genuine error reporting, and coverage logic remain unchanged.
 
 ## v0.3.2 published record-local implementation
 
