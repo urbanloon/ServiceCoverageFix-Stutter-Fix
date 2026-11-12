@@ -41,9 +41,7 @@ not archived in this repository.
 Removes the compatibility error popup when a different game build passes all
 structural and scheduling checks. The build hash is logged at information level.
 Actual loading failures still report errors. Coverage logic is unchanged from
-0.3.2. Published to the existing Paradox Mods listing on November 11, 2026.
-The Release build and publication completed successfully; the reference-model
-and stress-test suite also passed.
+0.3.2.
 
 ## Public version history
 
