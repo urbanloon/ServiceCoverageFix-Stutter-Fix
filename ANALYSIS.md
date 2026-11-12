@@ -2,7 +2,7 @@
 
 ## Version-history note
 
-The published source progression is **0.1.8 to 0.3.2**. The complete original
+The published source progression is **0.1.8 → 0.3.2 → 0.3.3**. The complete original
 0.1.8 source is preserved in commit `953bf61` and on the `archive-v0.1.8`
 branch. Labels such as 0.1.9, 0.2.0, and 0.3.1 below identify unpublished
 development experiments, not public releases. In particular, there was no
