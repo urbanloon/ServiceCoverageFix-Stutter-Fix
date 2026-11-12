@@ -665,3 +665,8 @@ For performance changes, repeat the same-scene capture and resolve samples to
 the exact replacement binary before changing another hot path. The next change
 should be justified by a new trace, not by the presence of an optimization that
 is theoretically possible.
+
+## License
+
+ServiceCoverageFix is licensed under the [MIT License](LICENSE).
+Third-party notices are retained in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
