@@ -69,7 +69,7 @@ P.S. If you're curious about the computer-science idea behind why changing an al
 	<GameVersion Value="*" />
 
 	<!-- Candidate changes from version 0.3.3 -->
-	<ChangeLog Value="Validates the coverage bridge before installing the patch and checks exact coverage field layouts. Tracks live replacement execution, managed versus Burst execution, and vanilla fallbacks. Coverage calculations are unchanged." />
+	<ChangeLog Value="Validates the coverage bridge before installing the patch and checks exact coverage field layouts. Tracks live replacement execution, managed versus Burst execution, and vanilla fallbacks. Keeps vanilla fallback available if diagnostic reporting fails. Attempts all unload cleanup stages after errors and retains worker counters until safe to release. Coverage calculations are unchanged." />
 
 	<!-- Supported values: Public, Private, Unlisted -->
 	<AccessLevel Value="Public" />

@@ -47,7 +47,9 @@ This branch adds execution verification. It has not been published to Paradox Mo
 - The replacement worker records starts, completions, and managed execution in
   a separate native counter allocation. `BurstDiscard` distinguishes managed
   execution from Burst execution. Probes do not contribute to live counters.
-- Every scheduling fallback is counted and its latest exception retained.
+- Scheduling fallbacks are counted and the latest exception description retained
+  when formatting succeeds. Diagnostic or logging failures cannot prevent the
+  original game job from being scheduled; errors from that scheduler still propagate.
   Successful startup is described as installation, not proof of live execution.
 - **Options → Service Coverage Stutter Fix → Diagnostics** exposes the state,
   counters, and last fallback error. Reopen the panel to refresh. Diagnostic tools
@@ -55,6 +57,10 @@ This branch adds execution verification. It has not been published to Paradox Mo
 - Counter writes occur once per job entry/exit, never per element. Counter memory
   is released only after tracked jobs complete. Normal scheduling only reclaims
   already-finished handles; it does not block on outstanding coverage work.
+- Unload attempts every cleanup stage even if UI removal or unpatching fails.
+  Failed resource handles remain available for a retry, and all cleanup errors
+  are preserved. Failed job completion retains counter memory until a later
+  cleanup can safely release it.
 
 The state reports observations since load: a managed execution or fallback
 remains visible even if later jobs succeed. Counts include empty coverage jobs.
@@ -83,7 +89,7 @@ The public source progression is **0.1.8 → 0.3.2 → 0.3.3**.
   included temporary diagnostic controls. The original source is preserved on
   the [`archive-v0.1.8`](https://github.com/urbanloon/ServiceCoverageFix-Stutter-Fix/tree/archive-v0.1.8/ServiceCoverageFix)
   branch and in commit
-  [`953bf61`](https://github.com/urbanloon/ServiceCoverageFix-Stutter-Fix/tree/953bf61/ServiceCoverageFix).
+  [`95121ee`](https://github.com/urbanloon/ServiceCoverageFix-Stutter-Fix/tree/95121ee/ServiceCoverageFix).
   The older `v0.1.8` tag predates the source upload and is not the authoritative
   source snapshot.
 - **0.3.2** replaced the 33-bucket selector
@@ -697,10 +703,14 @@ mod. Its notice is retained in
    dotnet run --project tests/runtime_harness/RuntimeHarness.csproj -p:GameManagedPath="PATH/TO/Cities2_Data/Managed"
    ```
 
-   This executes production bridge, job, and diagnostic code against test-only
+   This executes production bridge, job, diagnostic, and mod-disposal code against test-only
    collection/scheduler adapters and the game's mathematics library. It covers
    failed field validation, deferred execution, managed detection, repeated
    fallback, single scheduling, unload, reload, and native allocation lifetime.
+   Fault injection checks logger and exception-formatting failures, propagation
+   of vanilla scheduling failures, and all 16 combinations of settings removal,
+   locale removal, unpatching, and job-completion failure. It also verifies cleanup
+   retries and vanilla fallback when failed unpatching leaves a patch installed.
    It does not validate Harmony installation, Burst output, or Unity scheduling.
    Test adapters are excluded from the mod project.
 
