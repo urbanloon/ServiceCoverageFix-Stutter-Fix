@@ -101,8 +101,7 @@ game coverage assets produce. A modded or corrupt prefab with a NaN coverage
 magnitude is outside this guarantee; vanilla's own comparator is inconsistent
 for NaN and does not define a reproducible total order for that input.
 
-Harmony 2.2.2 is packaged privately. The old DependencyPack subscription is not
-required.
+Harmony 2.2.2 is packaged privately.
 
 ## Build and test
 
