@@ -1,0 +1,114 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -150,0 +151,4 @@
++            else if (recordCount <= 1537)
++            {
++                skipped = ExecuteTournament(slots, elements, recordCount);
++            }
+@@ -641,0 +646,106 @@
++        // The radix queue has already resolved this exact value when it pops
++        // the runner. Zero encodings compare equally in the active float mode.
++        private static float CoverageFromPriority(uint priority)
++        {
++            uint mask = (uint)(~(int)priority >> 31) & 0x7FFFFFFFu;
++            return math.asfloat(priority ^ mask);
++        }
++
++        // Each competitor owns one tournament leaf. When its provider runs,
++        // the old winner takes the vacated leaf. Only that leaf's path changes.
++        [SkipLocalsInit]
++        private static int ExecuteTournament(
++            [NoAlias] ProviderSlot* slots,
++            [NoAlias] RawCoverageElement* elements,
++            int count)
++        {
++            const int MaxLeaves = 1536;
++            int n = count - 1;
++            int* losers = stackalloc int[MaxLeaves];
++            int* providers = stackalloc int[MaxLeaves];
++            if (math.isnan(elements[slots[0].State.NextIndex].AverageCoverage))
++                return ExecuteOrderedMerge(slots, elements, count);
++            for (int leaf = 0; leaf < n; leaf++)
++            {
++                float first = elements[slots[leaf + 1].State.NextIndex].AverageCoverage;
++                if (math.isnan(first))
++                    return ExecuteOrderedMerge(slots, elements, count);
++                slots[leaf].Node.Next = unchecked((int)0x80000000) + leaf;
++                slots[leaf].Node.Priority = GetPriority(first);
++            }
++
++            // This temporary winners table becomes the leaf-to-provider map.
++            for (int node = n - 1; node > 0; node--)
++            {
++                int left = 2 * node;
++                int right = left + 1;
++                left = left >= n ? left - n : providers[left];
++                right = right >= n ? right - n : providers[right];
++                if (*(ulong*)&slots[right].Node < *(ulong*)&slots[left].Node)
++                {
++                    providers[node] = right;
++                    losers[node] = left;
++                }
++                else
++                {
++                    providers[node] = left;
++                    losers[node] = right;
++                }
++            }
++            int top = providers[1];
++            for (int i = 0; i < n; i++) providers[i] = i + 1;
++
++            int winner = 0;
++            int skipped = 0;
++            int liveLeaves = n;
++            int ticket = int.MaxValue;
++            while (liveLeaves != 0)
++            {
++                int runner = providers[top];
++                float cutoff = CoverageFromPriority(slots[top].Node.Priority);
++                ProviderState* state = &slots[winner].State;
++                ProviderState local = *state;
++                int cursor = local.NextIndex;
++                int end = local.EndIndex;
++                while (true)
++                {
++                    int index = cursor++;
++                    bool more = cursor != end;
++                    float next = more ? elements[cursor].AverageCoverage : 0f;
++                    bool live = ApplyElement(&local, elements + index);
++                    if (!live || !more)
++                    {
++                        skipped += end - cursor;
++                        *(ulong*)&slots[top].Node = ulong.MaxValue;
++                        liveLeaves--;
++                        break;
++                    }
++                    if (!(next < cutoff))
++                        continue;
++
++                    slots[top].Node.Next = ticket--;
++                    slots[top].Node.Priority = GetPriority(next);
++                    providers[top] = winner;
++                    break;
++                }
++                state->NextIndex = cursor;
++                state->Remaining = local.Remaining;
++                winner = runner;
++                ulong rank = *(ulong*)&slots[top].Node;
++                int node = (top + n) >> 1;
++                while (node != 0)
++                {
++                    int rival = losers[node];
++                    ulong rivalRank = *(ulong*)&slots[rival].Node;
++                    if (rivalRank < rank)
++                    {
++                        losers[node] = top;
++                        top = rival;
++                        rank = rivalRank;
++                    }
++                    node >>= 1;
++                }
++            }
++            return skipped + ExecuteSingleProvider(&slots[winner].State, elements);
++        }
++

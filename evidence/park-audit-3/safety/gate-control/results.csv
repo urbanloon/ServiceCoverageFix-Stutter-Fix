@@ -1,0 +1,5 @@
+hot_targets_shared,unvisited_tails_shared,actual_gate,distinct_visited_targets,stock_visits,stock_stores
+0,0,0,384,384,384
+0,1,1,384,384,384
+1,0,0,1,384,384
+1,1,1,1,384,384

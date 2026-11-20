@@ -1,0 +1,15 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -361,0 +362,2 @@
++            ProviderState* state = &slots[0].State;
++            ProviderState local = *state;
+@@ -369,3 +371,3 @@
+-                float cutoff = elements[slots[runnerUp].State.NextIndex].AverageCoverage;
+-                ProviderState* state = &slots[winner].State;
+-                ProviderState local = *state;
++                ProviderState* runnerState = &slots[runnerUp].State;
++                ProviderState runnerLocal = *runnerState;
++                float cutoff = elements[runnerLocal.NextIndex].AverageCoverage;
+@@ -396,0 +399,2 @@
++                state = runnerState;
++                local = runnerLocal;

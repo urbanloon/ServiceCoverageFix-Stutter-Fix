@@ -1,0 +1,13 @@
+capture,provider,guid_bytes_present
+C03,DXGI,0
+C03,DxgKrnl,0
+C03,D3D9,0
+C04,DXGI,0
+C04,DxgKrnl,0
+C04,D3D9,0
+C06,DXGI,0
+C06,DxgKrnl,0
+C06,D3D9,0
+C07,DXGI,0
+C07,DxgKrnl,0
+C07,D3D9,0

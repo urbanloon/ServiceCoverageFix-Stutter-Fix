@@ -1,0 +1,18 @@
+Game.dll original SHA-256 f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745
+ServiceCoverageFix.dll original SHA-256 5ef6bb3c185cde1a4ce040f84fa0711f5396b7d7591109ca82d37870c7541228
+Game.Simulation.ServiceCoverageSystem/ApplyCoverageJob: consumed index at IL_0096
+Game.Simulation.ServiceCoverageSystem/ApplyCoverageJob: destination pointer and both float bit patterns at IL_0159
+ServiceCoverageFix.OptimizedApplyCoverageJob: ApplyElement entry logs element pointer
+ServiceCoverageFix.OptimizedApplyCoverageJob: destination pointer and both float bit patterns at IL_00ad
+STOCK_ROADS,local,6128,6128
+STOCK_ROADS,citywide,6128,6128
+STOCK_ROADS,mixed,6128,6128
+STOCK_ROADS,ties,6128,6128
+STOCK_ROADS,tight,1392,1392
+group,cases,selected_elements,target_stores
+local,1,1111964,18926
+citywide,1,1111964,18850
+mixed,1,556794,18787
+ties,1,1109953,23775
+tight,1,1576,1545
+PASS 5 cases; 3892251 visits; 81883 stores. Interleaved visits, destination IDs, both float bit patterns, final bytes and guards match.

@@ -1,0 +1,150 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -150,7 +150,8 @@
+             }
+             else
+             {
+-                skipped = ExecuteByteRadixMerge(slots, elements, recordCount);
++                bool shared = HasSharedTargets(slots, elements, recordCount, Elements.Length);
++                skipped = ExecuteByteRadixMerge(slots, elements, recordCount, shared);
+             }
+             workload.Processed = workload.Available - skipped;
+             return workload;
+@@ -313,7 +314,7 @@
+         private static int ExecuteByteRadixMerge(
+             [NoAlias] ProviderSlot* slots,
+             [NoAlias] RawCoverageElement* elements,
+-            int recordCount)
++            int recordCount, bool shared)
+         {
+             // Fixed scratch storage, independent of provider count:
+             // 3 * 1,025 * 4 bytes + 17 * 8 bytes = 12,436 bytes.
+@@ -357,6 +358,8 @@
+                     GetByteBucket(priority, lastPriority), priority);
+             }
+ 
++            if (shared)
++                return ExecutePair(slots, elements, heads, tails, minimums, occupancy, occupiedWordMask, lastPriority);
+             int winner = 0;
+             int skipped = 0;
+             while (occupiedWordMask != 0)
+@@ -399,6 +402,119 @@
+             return skipped + ExecuteSingleProvider(&slots[winner].State, elements);
+         }
+ 
++
++        // Sample separate portions of different providers and require two distinct
++        // repeated road addresses in each portion. No target is dereferenced.
++        [MethodImpl(MethodImplOptions.NoInlining)]
++        private static bool HasSharedTargets(ProviderSlot* slots, RawCoverageElement* elements,
++            int providers, int elementLength)
++        {
++            const int samples = 384;
++            if (providers < samples || elementLength < 262144) return false;
++            ulong* seen = stackalloc ulong[256];
++            int stride = providers / samples;
++            for (int band = 0; band < 2; band++)
++            {
++                for (int j = 0; j < 256; j++) seen[j] = 0;
++                ulong firstDuplicate = 0;
++                bool confirmed = false;
++                for (int j = 0; j < samples; j++)
++                {
++                    ProviderState state = slots[j * stride].State;
++                    if (state.NextIndex < 0 || state.EndIndex > elementLength ||
++                        state.EndIndex < state.NextIndex || state.EndIndex - state.NextIndex < 512)
++                        return false;
++                    int eighth = (state.EndIndex - state.NextIndex) >> 3;
++                    int index = state.NextIndex + eighth * (1 + 4 * band) + ((j * 53) & 63);
++                    ulong address = (ulong)elements[index].CoveragePtr;
++                    if (address == 0) return false;
++                    int bin = (int)(unchecked((address >> 3) * 11400714819323198485UL) >> 56);
++                    if (seen[bin] == address)
++                    {
++                        if (firstDuplicate != 0 && firstDuplicate != address)
++                        {
++                            confirmed = true;
++                            break;
++                        }
++                        firstDuplicate = address;
++                    }
++                    seen[bin] = address;
++                }
++                if (!confirmed) return false;
++            }
++            return true;
++        }
++
++        [MethodImpl(MethodImplOptions.NoInlining)]
++        private static int ExecutePair(ProviderSlot* slots, RawCoverageElement* elements,
++            int* heads, int* tails, uint* minimums, ulong* occupancy, uint occupiedWordMask, uint lastPriority)
++        {
++            int winner = 0;
++            int skipped = 0;
++            int runner = ByteTakeWinner(slots, heads, tails, minimums, occupancy,
++                ref occupiedWordMask, ref lastPriority);
++            float cutoff = elements[slots[runner].State.NextIndex].AverageCoverage;
++            while (true)
++            {
++                // The third provider stays fixed while the front pair alternates.
++                bool hasThird = occupiedWordMask != 0;
++                int third = -1;
++                float floor = 0f;
++                if (hasThird)
++                {
++                    third = ByteTakeWinner(slots, heads, tails, minimums, occupancy,
++                        ref occupiedWordMask, ref lastPriority);
++                    floor = elements[slots[third].State.NextIndex].AverageCoverage;
++                }
++                while (true)
++                {
++                    ProviderState* state = &slots[winner].State;
++                    ProviderState local = *state;
++                    int cursor = local.NextIndex;
++                    int end = local.EndIndex;
++                    bool hasNext;
++                    float next;
++                    do
++                    {
++                        int index = cursor++;
++                        hasNext = cursor != end;
++                        next = hasNext ? elements[cursor].AverageCoverage : 0f;
++                        if (!ApplyElement(&local, elements + index)) hasNext = false;
++                    }
++                    while (hasNext && !(next < cutoff));
++                    state->NextIndex = cursor;
++                    state->Remaining = local.Remaining;
++
++                    if (!hasNext)
++                    {
++                        skipped += end - cursor;
++                        if (!hasThird)
++                            return skipped + ExecuteSingleProvider(&slots[runner].State, elements);
++                    }
++                    else if (!hasThird || !(next < floor))
++                    {
++                        // The old winner lost to the runner but remains ahead
++                        // of the third. Its equality wins the reinsert tie.
++                        int previous = winner;
++                        winner = runner;
++                        runner = previous;
++                        cutoff = next;
++                        continue;
++                    }
++                    else
++                    {
++                        uint priority = GetPriority(next);
++                        BytePrepend(slots, heads, tails, minimums, occupancy,
++                            ref occupiedWordMask, winner, GetByteBucket(priority, lastPriority), priority);
++                    }
++                    winner = runner;
++                    runner = third;
++                    cutoff = floor;
++                    break;
++                }
++            }
++        }
++
+         // Burst otherwise emits a call for each change of winning provider.
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+         private static int ByteTakeWinner(

@@ -1,0 +1,218 @@
+test,result
+current/coverage_contract.log,"PASS: reviewed contract, unrelated edit and token renumbering, seven method mutations, arithmetic change, Burst annotation, independently disabled preview"
+current/game_contract.log,"PASS real Game.Simulation.ServiceCoverageSystem.OnUpdate, Prepare service field, unchanged intervening calls and dependencies, emitted Harmony bridge token, zero/duplicate and foreign job rejection, uncertain attribution fallback."
+current/game_contract.log,"PASS real Game.Tools.CoveragePreviewSystem.OnUpdate, Prepare service field, unchanged intervening calls and dependencies, emitted Harmony bridge token, zero/duplicate and foreign job rejection, uncertain attribution fallback."
+current/options_widgets.log,"PASS: 7 actual game Options widgets bind and serialize diagnostic values, including changes on existing widgets."
+current/fp-AVX2-daz-ftz.log,Worker denormal mode: daz-ftz
+current/fp-AVX2-daz-ftz.log,Game SHA256 F076DF4B70AA0F21A80345E03A052CA2273BC6754F41DAB7E63D837837A43745
+current/fp-AVX2-daz-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+current/fp-AVX2-daz-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+current/fp-AVX2-daz-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+current/fp-AVX2-daz-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+current/fp-AVX2-daz.log,Worker denormal mode: daz
+current/fp-AVX2-daz.log,Game SHA256 F076DF4B70AA0F21A80345E03A052CA2273BC6754F41DAB7E63D837837A43745
+current/fp-AVX2-daz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+current/fp-AVX2-daz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+current/fp-AVX2-daz.log,"PASS: 8193 active providers, one tied-priority element each."
+current/fp-AVX2-daz.log,"PASS: 65537 active providers, one tied-priority element each."
+current/fp-AVX2-ftz.log,Worker denormal mode: ftz
+current/fp-AVX2-ftz.log,Game SHA256 F076DF4B70AA0F21A80345E03A052CA2273BC6754F41DAB7E63D837837A43745
+current/fp-AVX2-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+current/fp-AVX2-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+current/fp-AVX2-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+current/fp-AVX2-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+current/fp-AVX2-preserve.log,Worker denormal mode: preserve
+current/fp-AVX2-preserve.log,Game SHA256 F076DF4B70AA0F21A80345E03A052CA2273BC6754F41DAB7E63D837837A43745
+current/fp-AVX2-preserve.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+current/fp-AVX2-preserve.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+current/fp-AVX2-preserve.log,"PASS: 8193 active providers, one tied-priority element each."
+current/fp-AVX2-preserve.log,"PASS: 65537 active providers, one tied-priority element each."
+current/fp-X64_SSE4-daz-ftz.log,Worker denormal mode: daz-ftz
+current/fp-X64_SSE4-daz-ftz.log,Game SHA256 F076DF4B70AA0F21A80345E03A052CA2273BC6754F41DAB7E63D837837A43745
+current/fp-X64_SSE4-daz-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+current/fp-X64_SSE4-daz-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+current/fp-X64_SSE4-daz-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+current/fp-X64_SSE4-daz-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+current/fp-X64_SSE4-daz.log,Worker denormal mode: daz
+current/fp-X64_SSE4-daz.log,Game SHA256 F076DF4B70AA0F21A80345E03A052CA2273BC6754F41DAB7E63D837837A43745
+current/fp-X64_SSE4-daz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+current/fp-X64_SSE4-daz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+current/fp-X64_SSE4-daz.log,"PASS: 8193 active providers, one tied-priority element each."
+current/fp-X64_SSE4-daz.log,"PASS: 65537 active providers, one tied-priority element each."
+current/fp-X64_SSE4-ftz.log,Worker denormal mode: ftz
+current/fp-X64_SSE4-ftz.log,Game SHA256 F076DF4B70AA0F21A80345E03A052CA2273BC6754F41DAB7E63D837837A43745
+current/fp-X64_SSE4-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+current/fp-X64_SSE4-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+current/fp-X64_SSE4-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+current/fp-X64_SSE4-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+current/fp-X64_SSE4-preserve.log,Worker denormal mode: preserve
+current/fp-X64_SSE4-preserve.log,Game SHA256 F076DF4B70AA0F21A80345E03A052CA2273BC6754F41DAB7E63D837837A43745
+current/fp-X64_SSE4-preserve.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+current/fp-X64_SSE4-preserve.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+current/fp-X64_SSE4-preserve.log,"PASS: 8193 active providers, one tied-priority element each."
+current/fp-X64_SSE4-preserve.log,"PASS: 65537 active providers, one tied-priority element each."
+hist/coverage_contract.log,"PASS: reviewed contract, unrelated edit and token renumbering, seven method mutations, arithmetic change, Burst annotation, independently disabled preview"
+hist/fp-AVX2-daz-ftz.log,Worker denormal mode: daz-ftz
+hist/fp-AVX2-daz-ftz.log,Game SHA256 721E7E17BF74299AA2B988C1BD07E90874BB8BC72D263229500C4BF639E7E4EE
+hist/fp-AVX2-daz-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+hist/fp-AVX2-daz-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+hist/fp-AVX2-daz-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+hist/fp-AVX2-daz-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+hist/fp-AVX2-daz.log,Worker denormal mode: daz
+hist/fp-AVX2-daz.log,Game SHA256 721E7E17BF74299AA2B988C1BD07E90874BB8BC72D263229500C4BF639E7E4EE
+hist/fp-AVX2-daz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+hist/fp-AVX2-daz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+hist/fp-AVX2-daz.log,"PASS: 8193 active providers, one tied-priority element each."
+hist/fp-AVX2-daz.log,"PASS: 65537 active providers, one tied-priority element each."
+hist/fp-AVX2-ftz.log,Worker denormal mode: ftz
+hist/fp-AVX2-ftz.log,Game SHA256 721E7E17BF74299AA2B988C1BD07E90874BB8BC72D263229500C4BF639E7E4EE
+hist/fp-AVX2-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+hist/fp-AVX2-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+hist/fp-AVX2-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+hist/fp-AVX2-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+hist/fp-AVX2-preserve.log,Worker denormal mode: preserve
+hist/fp-AVX2-preserve.log,Game SHA256 721E7E17BF74299AA2B988C1BD07E90874BB8BC72D263229500C4BF639E7E4EE
+hist/fp-AVX2-preserve.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+hist/fp-AVX2-preserve.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+hist/fp-AVX2-preserve.log,"PASS: 8193 active providers, one tied-priority element each."
+hist/fp-AVX2-preserve.log,"PASS: 65537 active providers, one tied-priority element each."
+hist/fp-X64_SSE4-daz-ftz.log,Worker denormal mode: daz-ftz
+hist/fp-X64_SSE4-daz-ftz.log,Game SHA256 721E7E17BF74299AA2B988C1BD07E90874BB8BC72D263229500C4BF639E7E4EE
+hist/fp-X64_SSE4-daz-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+hist/fp-X64_SSE4-daz-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+hist/fp-X64_SSE4-daz-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+hist/fp-X64_SSE4-daz-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+hist/fp-X64_SSE4-daz.log,Worker denormal mode: daz
+hist/fp-X64_SSE4-daz.log,Game SHA256 721E7E17BF74299AA2B988C1BD07E90874BB8BC72D263229500C4BF639E7E4EE
+hist/fp-X64_SSE4-daz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+hist/fp-X64_SSE4-daz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+hist/fp-X64_SSE4-daz.log,"PASS: 8193 active providers, one tied-priority element each."
+hist/fp-X64_SSE4-daz.log,"PASS: 65537 active providers, one tied-priority element each."
+hist/fp-X64_SSE4-ftz.log,Worker denormal mode: ftz
+hist/fp-X64_SSE4-ftz.log,Game SHA256 721E7E17BF74299AA2B988C1BD07E90874BB8BC72D263229500C4BF639E7E4EE
+hist/fp-X64_SSE4-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+hist/fp-X64_SSE4-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+hist/fp-X64_SSE4-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+hist/fp-X64_SSE4-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+hist/fp-X64_SSE4-preserve.log,Worker denormal mode: preserve
+hist/fp-X64_SSE4-preserve.log,Game SHA256 721E7E17BF74299AA2B988C1BD07E90874BB8BC72D263229500C4BF639E7E4EE
+hist/fp-X64_SSE4-preserve.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+hist/fp-X64_SSE4-preserve.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+hist/fp-X64_SSE4-preserve.log,"PASS: 8193 active providers, one tied-priority element each."
+hist/fp-X64_SSE4-preserve.log,"PASS: 65537 active providers, one tied-priority element each."
+hist/game_contract.log,"PASS real Game.Simulation.ServiceCoverageSystem.OnUpdate, Prepare service field, unchanged intervening calls and dependencies, emitted Harmony bridge token, zero/duplicate and foreign job rejection, uncertain attribution fallback."
+hist/game_contract.log,"PASS real Game.Tools.CoveragePreviewSystem.OnUpdate, Prepare service field, unchanged intervening calls and dependencies, emitted Harmony bridge token, zero/duplicate and foreign job rejection, uncertain attribution fallback."
+hist/options_widgets.log,"PASS: 7 actual game Options widgets bind and serialize diagnostic values, including changes on existing widgets."
+hist/oracle-AVX2.log,"PASS 2750 native workloads. All four counters matched input metadata and 2669403 independently instrumented stock visits. Native target bytes, input elements and guards matched."
+hist/oracle-AVX2.log,Game SHA256 721E7E17BF74299AA2B988C1BD07E90874BB8BC72D263229500C4BF639E7E4EE
+hist/oracle-AVX2.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+hist/oracle-AVX2.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+hist/oracle-AVX2.log,"PASS: 8193 active providers, one tied-priority element each."
+hist/oracle-AVX2.log,"PASS: 65537 active providers, one tied-priority element each."
+hist/oracle-X64_SSE4.log,"PASS 2750 native workloads. All four counters matched input metadata and 2669403 independently instrumented stock visits. Native target bytes, input elements and guards matched."
+hist/oracle-X64_SSE4.log,Game SHA256 721E7E17BF74299AA2B988C1BD07E90874BB8BC72D263229500C4BF639E7E4EE
+hist/oracle-X64_SSE4.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+hist/oracle-X64_SSE4.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+hist/oracle-X64_SSE4.log,"PASS: 8193 active providers, one tied-priority element each."
+hist/oracle-X64_SSE4.log,"PASS: 65537 active providers, one tied-priority element each."
+hist/visit.log,Game.dll original SHA-256 721e7e17bf74299aa2b988c1bd07e90874bb8bc72d263229500c4bf639e7e4ee
+hist/visit.log,ServiceCoverageFix.dll original SHA-256 b8c8a7d6494839bda0445af05098d94c1d2841c3fa107dd45368993284748a6d
+hist/visit.log,"heavy-distinct,1,510220,57461"
+hist/visit.log,"heavy-ties,1,510220,62441"
+hist/visit.log,"heavy-shared-target,1,510220,14"
+hist/visit.log,"PASS 2750 cases; 2669403 visits; 262133 stores. Interleaved visits, destination IDs, both float bit patterns, final bytes and guards match."
+current/oracle-AVX2.log,"PASS 2750 native workloads. All four counters matched input metadata and 2669403 independently instrumented stock visits. Native target bytes, input elements and guards matched."
+current/oracle-AVX2.log,Game SHA256 F076DF4B70AA0F21A80345E03A052CA2273BC6754F41DAB7E63D837837A43745
+current/oracle-AVX2.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+current/oracle-AVX2.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+current/oracle-AVX2.log,"PASS: 8193 active providers, one tied-priority element each."
+current/oracle-AVX2.log,"PASS: 65537 active providers, one tied-priority element each."
+current/oracle-X64_SSE4.log,"PASS 2750 native workloads. All four counters matched input metadata and 2669403 independently instrumented stock visits. Native target bytes, input elements and guards matched."
+current/oracle-X64_SSE4.log,Game SHA256 F076DF4B70AA0F21A80345E03A052CA2273BC6754F41DAB7E63D837837A43745
+current/oracle-X64_SSE4.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+current/oracle-X64_SSE4.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+current/oracle-X64_SSE4.log,"PASS: 8193 active providers, one tied-priority element each."
+current/oracle-X64_SSE4.log,"PASS: 65537 active providers, one tied-priority element each."
+current/runtime-harness.log,"PASS: bridge probes (0/1/2 providers), bad fields, pending execution, managed detection, repeated fallback, single scheduling, unload completion, reload, allocation lifetime."
+current/runtime-harness.log,"PASS: synchronous preflight lifetime, partial startup rollback, duplicate load isolation, checked-inactive Options, optional event cleanup and retry, reporting/formatting failures preserve one vanilla job and its dependency; vanilla scheduling errors propagate; all 16 unload-failure combinations preserve errors, counter lifetime, and retryable cleanup."
+current/runtime-harness.log,"PASS: optional preview contract, failure isolation, stale patch count, separate service samples, counters and fallbacks, unload."
+current/runtime-harness.log,"PASS: game load resets both workload histories, preserves pending jobs and totals, ignores earlier completions and unsubscribes on unload."
+current/runtime-harness.log,"PASS: paused UI formatting allows new schedules and load reset, preserves immutable counters and cannot recache pre-load rows."
+current/runtime-harness.log,"PASS: eight service rows, unobserved/zero passes, active ranges, reserved input, budget tails, occluded visits, ordered overlapping passes, pooling, unattributed passes and reset."
+current/runtime-harness.log,"PASS: preview bridge preserves vanilla dependencies while inactive, schedules one accepted replacement, and falls back exactly once on failure."
+sep/coverage_contract.log,"PASS: reviewed contract, unrelated edit and token renumbering, seven method mutations, arithmetic change, Burst annotation, independently disabled preview"
+sep/fp-AVX2-daz-ftz.log,Worker denormal mode: daz-ftz
+sep/fp-AVX2-daz-ftz.log,Game SHA256 AAEE15C4FA41C130ABAA1183840667E4FAAE531D67E8A9FA7536618EFFA2F86A
+sep/fp-AVX2-daz-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+sep/fp-AVX2-daz-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+sep/fp-AVX2-daz-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+sep/fp-AVX2-daz-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+sep/fp-AVX2-daz.log,Worker denormal mode: daz
+sep/fp-AVX2-daz.log,Game SHA256 AAEE15C4FA41C130ABAA1183840667E4FAAE531D67E8A9FA7536618EFFA2F86A
+sep/fp-AVX2-daz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+sep/fp-AVX2-daz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+sep/fp-AVX2-daz.log,"PASS: 8193 active providers, one tied-priority element each."
+sep/fp-AVX2-daz.log,"PASS: 65537 active providers, one tied-priority element each."
+sep/fp-AVX2-ftz.log,Worker denormal mode: ftz
+sep/fp-AVX2-ftz.log,Game SHA256 AAEE15C4FA41C130ABAA1183840667E4FAAE531D67E8A9FA7536618EFFA2F86A
+sep/fp-AVX2-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+sep/fp-AVX2-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+sep/fp-AVX2-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+sep/fp-AVX2-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+sep/fp-AVX2-preserve.log,Worker denormal mode: preserve
+sep/fp-AVX2-preserve.log,Game SHA256 AAEE15C4FA41C130ABAA1183840667E4FAAE531D67E8A9FA7536618EFFA2F86A
+sep/fp-AVX2-preserve.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+sep/fp-AVX2-preserve.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+sep/fp-AVX2-preserve.log,"PASS: 8193 active providers, one tied-priority element each."
+sep/fp-AVX2-preserve.log,"PASS: 65537 active providers, one tied-priority element each."
+sep/fp-X64_SSE4-daz-ftz.log,Worker denormal mode: daz-ftz
+sep/fp-X64_SSE4-daz-ftz.log,Game SHA256 AAEE15C4FA41C130ABAA1183840667E4FAAE531D67E8A9FA7536618EFFA2F86A
+sep/fp-X64_SSE4-daz-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+sep/fp-X64_SSE4-daz-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+sep/fp-X64_SSE4-daz-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+sep/fp-X64_SSE4-daz-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+sep/fp-X64_SSE4-daz.log,Worker denormal mode: daz
+sep/fp-X64_SSE4-daz.log,Game SHA256 AAEE15C4FA41C130ABAA1183840667E4FAAE531D67E8A9FA7536618EFFA2F86A
+sep/fp-X64_SSE4-daz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+sep/fp-X64_SSE4-daz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+sep/fp-X64_SSE4-daz.log,"PASS: 8193 active providers, one tied-priority element each."
+sep/fp-X64_SSE4-daz.log,"PASS: 65537 active providers, one tied-priority element each."
+sep/fp-X64_SSE4-ftz.log,Worker denormal mode: ftz
+sep/fp-X64_SSE4-ftz.log,Game SHA256 AAEE15C4FA41C130ABAA1183840667E4FAAE531D67E8A9FA7536618EFFA2F86A
+sep/fp-X64_SSE4-ftz.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+sep/fp-X64_SSE4-ftz.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+sep/fp-X64_SSE4-ftz.log,"PASS: 8193 active providers, one tied-priority element each."
+sep/fp-X64_SSE4-ftz.log,"PASS: 65537 active providers, one tied-priority element each."
+sep/fp-X64_SSE4-preserve.log,Worker denormal mode: preserve
+sep/fp-X64_SSE4-preserve.log,Game SHA256 AAEE15C4FA41C130ABAA1183840667E4FAAE531D67E8A9FA7536618EFFA2F86A
+sep/fp-X64_SSE4-preserve.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+sep/fp-X64_SSE4-preserve.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+sep/fp-X64_SSE4-preserve.log,"PASS: 8193 active providers, one tied-priority element each."
+sep/fp-X64_SSE4-preserve.log,"PASS: 65537 active providers, one tied-priority element each."
+sep/game_contract.log,"PASS real Game.Simulation.ServiceCoverageSystem.OnUpdate, Prepare service field, unchanged intervening calls and dependencies, emitted Harmony bridge token, zero/duplicate and foreign job rejection, uncertain attribution fallback."
+sep/game_contract.log,"PASS real Game.Tools.CoveragePreviewSystem.OnUpdate, Prepare service field, unchanged intervening calls and dependencies, emitted Harmony bridge token, zero/duplicate and foreign job rejection, uncertain attribution fallback."
+sep/options_widgets.log,"PASS: 7 actual game Options widgets bind and serialize diagnostic values, including changes on existing widgets."
+sep/oracle-AVX2.log,"PASS 2750 native workloads. All four counters matched input metadata and 2669403 independently instrumented stock visits. Native target bytes, input elements and guards matched."
+sep/oracle-AVX2.log,Game SHA256 AAEE15C4FA41C130ABAA1183840667E4FAAE531D67E8A9FA7536618EFFA2F86A
+sep/oracle-AVX2.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+sep/oracle-AVX2.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+sep/oracle-AVX2.log,"PASS: 8193 active providers, one tied-priority element each."
+sep/oracle-AVX2.log,"PASS: 65537 active providers, one tied-priority element each."
+sep/oracle-X64_SSE4.log,"PASS 2750 native workloads. All four counters matched input metadata and 2669403 independently instrumented stock visits. Native target bytes, input elements and guards matched."
+sep/oracle-X64_SSE4.log,Game SHA256 AAEE15C4FA41C130ABAA1183840667E4FAAE531D67E8A9FA7536618EFFA2F86A
+sep/oracle-X64_SSE4.log,"Bitwise matches=1536, elements=636499, NaN-probe differences=0"
+sep/oracle-X64_SSE4.log,"PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched."
+sep/oracle-X64_SSE4.log,"PASS: 8193 active providers, one tied-priority element each."
+sep/oracle-X64_SSE4.log,"PASS: 65537 active providers, one tied-priority element each."
+sep/visit.log,Game.dll original SHA-256 aaee15c4fa41c130abaa1183840667e4faae531d67e8a9fa7536618effa2f86a
+sep/visit.log,ServiceCoverageFix.dll original SHA-256 b8c8a7d6494839bda0445af05098d94c1d2841c3fa107dd45368993284748a6d
+sep/visit.log,"heavy-distinct,1,510220,57461"
+sep/visit.log,"heavy-ties,1,510220,62441"
+sep/visit.log,"heavy-shared-target,1,510220,14"
+sep/visit.log,"PASS 2750 cases; 2669403 visits; 262133 stores. Interleaved visits, destination IDs, both float bit patterns, final bytes and guards match."
+current/visit.log,Game.dll original SHA-256 f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745
+current/visit.log,ServiceCoverageFix.dll original SHA-256 b8c8a7d6494839bda0445af05098d94c1d2841c3fa107dd45368993284748a6d
+current/visit.log,"heavy-distinct,1,510220,57461"
+current/visit.log,"heavy-ties,1,510220,62441"
+current/visit.log,"heavy-shared-target,1,510220,14"
+current/visit.log,"PASS 2750 cases; 2669403 visits; 262133 stores. Interleaved visits, destination IDs, both float bit patterns, final bytes and guards match."

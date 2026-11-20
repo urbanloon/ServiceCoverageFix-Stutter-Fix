@@ -1,0 +1,134 @@
+--- a/fixture/Program.cs
++++ b/fixture/Program.cs
+@@ -75,6 +75,98 @@
+         return new Inputs(providers, elements, targets);
+     }
+ 
++    static unsafe nint BlockAddress(Pass pass, string field)
++    {
++        var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
++        var block = (Block)typeof(Pass).GetField(field, flags)!.GetValue(pass)!;
++        return (nint)block.Data;
++    }
++
++    static Inputs Challenge(int seed, string shape)
++    {
++        if (shape == "small") return Inputs.Make(seed, 12, 96, 0, true);
++        if (shape is "local" or "citywide" or "tight" or "mixed" or "ties") return Make(seed, shape);
++        var data = Inputs.Make(seed, Providers, VisitsPerProvider, 0, true);
++        int total = data.Elements.Length;
++        var rng = new Random(seed ^ 79);
++        for (int p = 0; p < Providers; p++)
++        {
++            float budget = shape == "falsehot" ? 100f : 746.25f;
++            data.Providers[p].Total = data.Providers[p].Remaining = budget;
++            for (int r = 0; r < VisitsPerProvider; r++)
++            {
++                int i = p * VisitsPerProvider + r;
++                ref var el = ref data.Elements[i];
++                el.X = el.Y = el.Priority = 0.5f + 0.5f * el.Priority;
++                el.Density = el.Length = 1f;
++                int unique = (int)(((long)i * 15485863 + 3121) % total);
++                int road = shape switch {
++                    "hubs" when r % 5 == 0 => (r/5+17*p) % 449,
++                    "hubs" => 449 + unique,
++                    "bait" when r < 24 => r,
++                    "bait" => 24 + unique,
++                    "falsehot" when r < 240 => RoadCount + unique,
++                    "falsehot" => (p * 813 + r * 17) % RoadCount,
++                    "deep" when r < 1000 => RoadCount + unique,
++                    "deep" => (p * 813 + r * 17) % RoadCount,
++                    "sparse" => (p * 1597 + r * 857) % 250003,
++                    "sharedinter" => (p * 813 + r * 17) % RoadCount,
++                    "disjoint" => unique,
++                    _ => throw new ArgumentException(shape)
++                };
++                el.Target = road;
++            }
++        }
++        return new Inputs(data.Providers, data.Elements, new float[2 * (total + RoadCount)]);
++    }
++    static unsafe void Observe(Inputs input, nint targetBase, string shape)
++    {
++        var sorted = input.Providers.OrderByDescending(p => input.Elements[p.Start].Priority).ToArray();
++        if (sorted.Length < 384) return;
++        var all = new HashSet<nint>();
++        foreach (var el in input.Elements) all.Add(el.Target);
++        for (int band=0; band<2; band++)
++        {
++            var exact = new HashSet<nint>();
++            var duplicates = new HashSet<nint>();
++            var direct = new ulong[256];
++            var detected = new HashSet<ulong>();
++            int step=sorted.Length/384;
++            for (int k=0; k<384; k++)
++            {
++                var p=sorted[k*step];
++                int relative=(p.Count>>3)*(1 + 4 * band) + ((k*53)&63) % Math.Max(1,p.Count>>3);
++                ulong a=(ulong)(targetBase+8*input.Elements[p.Start+relative].Target);
++                if (!exact.Add((nint)a)) duplicates.Add((nint)a);
++                int bin=(int)(((a>>3)*11400714819323198485UL)>>56);
++                if (direct[bin]==a) detected.Add(a);
++                direct[bin]=a;
++            }
++            Console.Error.WriteLine($"PROBE,{shape},{band},{input.Elements.Length},{all.Count},{384-exact.Count},{duplicates.Count},{detected.Count}");
++        }
++    }
++
++    static unsafe void TimeClassifier(Inputs input, Pass pass, string shape, string binary)
++    {
++        var sorted = input.Providers.OrderByDescending(p => input.Elements[p.Start].Priority).ToArray();
++        for (int i=0;i<sorted.Length;i++) sorted[i].Count += sorted[i].Start;
++        var symbol = File.ReadAllText(binary+".symbol").Trim();
++        var test = (delegate* unmanaged[Cdecl]<Provider*, nint, int, int, byte>)NativeLibrary.GetExport(NativeLibrary.Load(binary), symbol);
++        nint elementAddress = BlockAddress(pass, "elements");
++        fixed (Provider* records=sorted)
++        {
++            byte decision=test(records, elementAddress, sorted.Length, input.Elements.Length);
++            for(int round=0; round<12; round++)
++            {
++                long before=ThreadNanoseconds();
++                int sum=0;
++                for(int i=0;i<4000;i++) sum+=test(records,elementAddress, sorted.Length,input.Elements.Length);
++                long elapsed=ThreadNanoseconds()-before;
++                if (sum!=4000*decision)throw new Exception("nondeterministic classifier");
++                Console.Error.WriteLine($"MICRO,{shape},{round},{decision},{elapsed/4000.0:F2}");
++            }
++        }
++    }
+     // rounds seed comma-separated-shapes vanilla=WORKER_DIR v036=WORKER_DIR [candidate=WORKER_DIR ...]
+     private static void Main(string[] args)
+     {
+@@ -94,17 +186,28 @@
+         Console.WriteLine("seed,shape,providers,available,processed,round,worker,wall_ms,thread_ms");
+         foreach (var shape in args[2].Split(','))
+         {
+-            if (shape is not ("local" or "citywide" or "ties" or "tight" or "mixed"))
+-                throw new ArgumentException(shape);
+-            var input = Make(seed, shape);
++            var input = Challenge(seed, shape);
+             using var pass = new Pass(input);
++            Observe(input, BlockAddress(pass, "targets"), shape);
++            string? micro=Environment.GetEnvironmentVariable("GATE_MICRO");
++            if (micro!=null) TimeClassifier(input,pass,shape,micro);
++            if (rounds == 0) continue;
+             pass.Execute(workers[0].job.Execute);
+             pass.Check();
+             byte[] expected = pass.Outputs();
++            if (shape == "falsehot")
++            {
++                var roadValues=MemoryMarshal.Cast<byte,float>(expected.AsSpan());
++                int sharedWrites=0;
++                for (int r=0;r<RoadCount;r++)
++                    if (roadValues[2*r]!=0 || roadValues[2*r+1]!=0) sharedWrites++;
++                Console.Error.WriteLine($"CONSUMED,{shape},sharedRoadsChanged={sharedWrites}");
++                if (sharedWrites!=0) throw new Exception("Falsehot prefix exceeded.");
++            }
+             pass.Reset();
+             pass.Execute(workers[1].job.Execute);
+             var work = workers[1].job.LastWorkload();
+-            if (work.Providers != Providers || work.Available != input.Elements.Length || work.Reserved != work.Available)
++            if (work.Providers != input.Providers.Length || work.Available != input.Elements.Length || work.Reserved != work.Available)
+                 throw new InvalidDataException("Unexpected baseline workload.");
+             // Rotate the first worker each round and reverse each complete rotation.
+             for (int round = -2; round < rounds; ++round)

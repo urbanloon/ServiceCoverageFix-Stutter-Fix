@@ -1,0 +1,38 @@
+--- a/Instrument.cs
++++ b/Instrument.cs
+@@ -35,6 +35,12 @@
+         {
+             if (method.Parameters.Count != 2 || !method.Parameters[1].ParameterType.FullName.EndsWith("RawCoverageElement*"))
+                 throw new Exception("ApplyElement signature changed");
++            var outer=type.Methods.Single(m=>m.Name=="ExecuteCoverage");
++            var sampleCall=outer.Body.Instructions.Single(i=>i.Operand is MethodReference r && r.Name=="HasSharedTargets");
++            var probe=outer.Body.GetILProcessor();
++            var duplicate=probe.Create(OpCodes.Dup);
++            probe.InsertAfter(sampleCall,duplicate);
++            probe.InsertAfter(duplicate,probe.Create(OpCodes.Call,Hook(nameof(Probe.Gate))));
+             var first = instructions[0];
+             Insert(first, il.Create(OpCodes.Ldarg_1), il.Create(OpCodes.Conv_I), il.Create(OpCodes.Call, Hook(nameof(Probe.VisitAddress))));
+             Console.WriteLine($"{owner}: ApplyElement entry logs element pointer");
+--- a/Program.cs
++++ b/Program.cs
+@@ -11,6 +11,8 @@
+         elements = elementBase; targets = targetBase; elementCount = n; targetCount = m;
+         Events = new List<Entry>(n);
+     }
++    public static bool? Decision;
++    public static void Gate(bool decision) { Decision=decision; }
+     public static void VisitIndex(int index)
+     {
+         if ((uint)index >= (uint)elementCount) throw new Exception("Invalid selected index");
+@@ -73,6 +75,11 @@
+                     throw new Exception($"{label} mismatch at event {equal}: vanilla {baseline.ElementAtOrDefault(equal)} vs candidate {result.ElementAtOrDefault(equal)}");
+                 if(!pass.Outputs().AsSpan().SequenceEqual(output)) throw new Exception("Final output mismatch");
+                 int writes=baseline.Count(e=>e.Store);
++                int distinct=baseline.Where(e=>!e.Store).Select(e=>input.Elements[e.Index].Target).Distinct().Count();
++                bool tailsShared=label.EndsWith("True");
++                if(Probe.Decision!=tailsShared || baseline.Count(e=>!e.Store)!=384)
++                    throw new Exception("Unexpected observed gate or visitation");
++                Console.WriteLine($"{label},observed_gate={Probe.Decision},visited_distinct_targets={distinct},stock_visits={baseline.Count(e=>!e.Store)}");
+                 oracle?.WriteLine($"{label},{baseline.Count-writes}");
+                 var t=totals.GetValueOrDefault(label);
+                 totals[label]=(t.Cases+1,t.Visits+baseline.Count-writes,t.Writes+writes);

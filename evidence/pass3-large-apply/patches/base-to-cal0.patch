@@ -1,0 +1,377 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -153 +153 @@
+-                skipped = ExecuteByteRadixMerge(slots, elements, recordCount);
++                skipped = ExecuteCalendar(slots, elements, recordCount);
+@@ -311,0 +312,89 @@
++        // The radix queue has already resolved this exact value when it pops
++        // the runner. Zero encodings compare equally in the active float mode.
++        private static float CoverageFromPriority(uint priority)
++        {
++            uint mask = (uint)(~(int)priority >> 31) & 0x7FFFFFFFu;
++            return math.asfloat(priority ^ mask);
++        }
++
++        private const int NearBits = 10;
++        private const int NearSize = 1 << NearBits;
++        private const int NearShift = 0;
++
++        private struct Calendar
++        {
++            public int* Near;
++            public ulong* Occupancy;
++            public int* Far;
++            public uint* MinWindows;
++            public uint WordMask, FarMask, Window;
++        }
++
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        private static void CalendarAdd(ProviderSlot* slots, ref Calendar q, int id, uint priority)
++        {
++            uint window = priority >> (NearBits + NearShift);
++            if (window != q.Window)
++            {
++                int group = 31 - math.lzcnt(window ^ q.Window);
++                slots[id].Node.Next = q.Far[group];
++                if (q.Far[group] == -1)
++                {
++                    q.MinWindows[group] = window;
++                    q.FarMask |= 1u << group;
++                }
++                else
++                    q.MinWindows[group] = math.min(q.MinWindows[group], window);
++                q.Far[group] = id;
++                return;
++            }
++            int index = (int)(priority >> NearShift) & (NearSize - 1);
++            int head = q.Near[index];
++            if (head == -1)
++            {
++                int word = index >> 6;
++                q.WordMask |= 1u << word;
++                q.Occupancy[word] |= 1ul << index;
++            }
++            else if (NearShift != 0 && slots[head].Node.Priority < priority)
++            {
++                int before = head;
++                int next = slots[before].Node.Next;
++                while (next != -1 && slots[next].Node.Priority < priority)
++                {
++                    before = next;
++                    next = slots[before].Node.Next;
++                }
++                slots[id].Node.Next = next;
++                slots[before].Node.Next = id;
++                return;
++            }
++            slots[id].Node.Next = head;
++            q.Near[index] = id;
++        }
++
++        // Called only at window changes. Reverse before prepending to preserve
++        // the original order for equal priorities during redistribution.
++        private static void AdvanceCalendar(ProviderSlot* slots, ref Calendar q)
++        {
++            int source = math.tzcnt(q.FarMask);
++            q.FarMask &= ~(1u << source);
++            q.Window = q.MinWindows[source];
++            int current = q.Far[source];
++            q.Far[source] = -1;
++            int oldest = -1;
++            while (current != -1)
++            {
++                int previous = slots[current].Node.Next;
++                slots[current].Node.Next = oldest;
++                oldest = current;
++                current = previous;
++            }
++            while (oldest != -1)
++            {
++                int newer = slots[oldest].Node.Next;
++                CalendarAdd(slots, ref q, oldest, slots[oldest].Node.Priority);
++                oldest = newer;
++            }
++        }
++
+@@ -313 +402 @@
+-        private static int ExecuteByteRadixMerge(
++        private static int ExecuteCalendar(
+@@ -316,31 +405,15 @@
+-            int recordCount)
+-        {
+-            // Fixed scratch storage, independent of provider count:
+-            // 3 * 1,025 * 4 bytes + 17 * 8 bytes = 12,436 bytes.
+-            int* heads = stackalloc int[ByteRadixBucketCount];
+-            int* tails = stackalloc int[ByteRadixBucketCount];
+-            uint* minimums = stackalloc uint[ByteRadixBucketCount];
+-            ulong* occupancy = stackalloc ulong[OccupancyWordCount];
+-
+-            // Tails and minima are assigned when an empty bucket becomes live.
+-            for (int i = 0; i < ByteRadixBucketCount; i++)
+-            {
+-                heads[i] = -1;
+-            }
+-
+-            for (int i = 0; i < OccupancyWordCount; i++)
+-            {
+-                occupancy[i] = 0;
+-            }
+-
+-            uint occupiedWordMask = 0;
+-            uint lastPriority = 0;
+-            // The first sorted provider is already the winner. NaN can split
+-            // the initial list into ordered runs; until all heads are known to
+-            // be ordered, no provider state or coverage target is advanced.
+-            if (math.isnan(elements[slots[0].State.NextIndex].AverageCoverage))
+-            {
+-                return ExecuteOrderedMerge(slots, elements, recordCount);
+-            }
+-            // Reverse prepend retains the sorted order among the other providers.
+-            for (int i = recordCount - 1; i >= 1; i--)
++            int count)
++        {
++            int* near = stackalloc int[NearSize];
++            ulong* occupancy = stackalloc ulong[NearSize / 64];
++            int* far = stackalloc int[32];
++            uint* minima = stackalloc uint[32];
++            float firstWinner = elements[slots[0].State.NextIndex].AverageCoverage;
++            if (math.isnan(firstWinner))
++                return ExecuteOrderedMerge(slots, elements, count);
++            Calendar q = new Calendar { Near = near, Occupancy = occupancy, Far = far, MinWindows = minima,
++                Window = GetPriority(firstWinner) >> (NearBits + NearShift) };
++            for (int i = 0; i < NearSize; i++) near[i] = -1;
++            for (int i = 0; i < NearSize / 64; i++) occupancy[i] = 0;
++            for (int i = 0; i < 32; i++) far[i] = -1;
++            for (int i = count - 1; i > 0; i--)
+@@ -350,3 +423 @@
+-                {
+-                    return ExecuteOrderedMerge(slots, elements, recordCount);
+-                }
++                    return ExecuteOrderedMerge(slots, elements, count);
+@@ -354,4 +425,2 @@
+-                BytePrepend(
+-                    slots, heads, tails, minimums, occupancy,
+-                    ref occupiedWordMask, i,
+-                    GetByteBucket(priority, lastPriority), priority);
++                slots[i].Node.Priority = priority;
++                CalendarAdd(slots, ref q, i, priority);
+@@ -362,8 +431,16 @@
+-            while (occupiedWordMask != 0)
+-            {
+-                // The strongest competitor stays fixed until this provider
+-                // loses or exhausts its budget. An equal or unordered next
+-                // key keeps the winner, matching vanilla's ordered '<' test.
+-                int runnerUp = ByteTakeWinner(slots, heads, tails, minimums, occupancy,
+-                    ref occupiedWordMask, ref lastPriority);
+-                float cutoff = elements[slots[runnerUp].State.NextIndex].AverageCoverage;
++            while ((q.WordMask | q.FarMask) != 0)
++            {
++                if (q.WordMask == 0) AdvanceCalendar(slots, ref q);
++                int word = math.tzcnt(q.WordMask);
++                ulong occupied = occupancy[word];
++                int bucket = (word << 6) + math.tzcnt(occupied);
++                int runner = near[bucket];
++                int second = slots[runner].Node.Next;
++                near[bucket] = second;
++                if (second == -1)
++                {
++                    occupied &= occupied - 1;
++                    occupancy[word] = occupied;
++                    if (occupied == 0) q.WordMask &= ~(1u << word);
++                }
++                float cutoff = CoverageFromPriority(slots[runner].Node.Priority);
+@@ -377,2 +454,2 @@
+-                    bool hasNext = cursor != end;
+-                    float next = hasNext ? elements[cursor].AverageCoverage : 0f;
++                    bool more = cursor != end;
++                    float next = more ? elements[cursor].AverageCoverage : 0f;
+@@ -380 +457 @@
+-                    if (!live || !hasNext)
++                    if (!live || !more)
+@@ -385,4 +462 @@
+-                    if (!(next < cutoff))
+-                    {
+-                        continue;
+-                    }
++                    if (!(next < cutoff)) continue;
+@@ -391,2 +465,2 @@
+-                    BytePrepend(slots, heads, tails, minimums, occupancy,
+-                        ref occupiedWordMask, winner, GetByteBucket(priority, lastPriority), priority);
++                    slots[winner].Node.Priority = priority;
++                    CalendarAdd(slots, ref q, winner, priority);
+@@ -397 +471 @@
+-                winner = runnerUp;
++                winner = runner;
+@@ -400,172 +473,0 @@
+-        }
+-
+-        // Burst otherwise emits a call for each change of winning provider.
+-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+-        private static int ByteTakeWinner(
+-            ProviderSlot* slots,
+-            int* heads,
+-            int* tails,
+-            uint* minimums,
+-            ulong* occupancy,
+-            ref uint occupiedWordMask,
+-            ref uint lastPriority)
+-        {
+-            int current = heads[0];
+-            if (current != -1)
+-            {
+-                heads[0] = slots[current].Node.Next;
+-                if (heads[0] == -1)
+-                {
+-                    ClearByteBucket(heads, occupancy, ref occupiedWordMask, 0);
+-                }
+-                return current;
+-            }
+-
+-            int sourceBucket = GetLowestOccupiedBucket(
+-                occupancy, occupiedWordMask);
+-            lastPriority = minimums[sourceBucket];
+-            current = heads[sourceBucket];
+-            ClearByteBucket(
+-                heads, occupancy, ref occupiedWordMask, sourceBucket);
+-
+-            // A singleton can be returned without entering bucket zero.
+-            if (current == tails[sourceBucket])
+-            {
+-                return current;
+-            }
+-
+-            // All four bytes of a lowest-octet bucket's priority are fixed.
+-            // Its existing linked list already has the sorted tie order.
+-            if (sourceBucket <= 256)
+-            {
+-                heads[0] = slots[current].Node.Next;
+-                tails[0] = tails[sourceBucket];
+-                minimums[0] = lastPriority;
+-                SetByteBucketOccupied(occupancy, ref occupiedWordMask, 0);
+-                return current;
+-            }
+-
+-            // Append preserves concrete order; node.Priority is already cached.
+-            do
+-            {
+-                int next = slots[current].Node.Next;
+-                uint priority = slots[current].Node.Priority;
+-                ByteAppend(
+-                    slots, heads, tails, minimums, occupancy,
+-                    ref occupiedWordMask, current,
+-                    GetByteBucket(priority, lastPriority), priority);
+-                current = next;
+-            }
+-            while (current != -1);
+-
+-            current = heads[0];
+-            heads[0] = slots[current].Node.Next;
+-            if (heads[0] == -1)
+-            {
+-                ClearByteBucket(heads, occupancy, ref occupiedWordMask, 0);
+-            }
+-            return current;
+-        }
+-
+-        private static void BytePrepend(
+-            ProviderSlot* slots,
+-            int* heads,
+-            int* tails,
+-            uint* minimums,
+-            ulong* occupancy,
+-            ref uint occupiedWordMask,
+-            int providerIndex,
+-            int bucket,
+-            uint priority)
+-        {
+-            int oldHead = heads[bucket];
+-            slots[providerIndex].Node.Next = oldHead;
+-            slots[providerIndex].Node.Priority = priority;
+-            heads[bucket] = providerIndex;
+-
+-            if (oldHead == -1)
+-            {
+-                tails[bucket] = providerIndex;
+-                minimums[bucket] = priority;
+-                SetByteBucketOccupied(
+-                    occupancy, ref occupiedWordMask, bucket);
+-            }
+-            else
+-            {
+-                minimums[bucket] = math.min(minimums[bucket], priority);
+-            }
+-        }
+-
+-        private static void ByteAppend(
+-            ProviderSlot* slots,
+-            int* heads,
+-            int* tails,
+-            uint* minimums,
+-            ulong* occupancy,
+-            ref uint occupiedWordMask,
+-            int providerIndex,
+-            int bucket,
+-            uint priority)
+-        {
+-            slots[providerIndex].Node.Next = -1;
+-            if (heads[bucket] == -1)
+-            {
+-                heads[bucket] = providerIndex;
+-                tails[bucket] = providerIndex;
+-                minimums[bucket] = priority;
+-                SetByteBucketOccupied(
+-                    occupancy, ref occupiedWordMask, bucket);
+-            }
+-            else
+-            {
+-                slots[tails[bucket]].Node.Next = providerIndex;
+-                tails[bucket] = providerIndex;
+-                minimums[bucket] = math.min(minimums[bucket], priority);
+-            }
+-        }
+-
+-        private static int GetByteBucket(uint priority, uint lastPriority)
+-        {
+-            uint difference = priority ^ lastPriority;
+-            if (difference == 0)
+-            {
+-                return 0;
+-            }
+-
+-            int shift = (31 - math.lzcnt(difference)) & ~7;
+-            return 1 + (shift << 5) +
+-                (int)((priority >> shift) & 0xFFu);
+-        }
+-
+-        private static int GetLowestOccupiedBucket(
+-            ulong* occupancy,
+-            uint occupiedWordMask)
+-        {
+-            int sourceWord = math.tzcnt(occupiedWordMask);
+-            int bit = math.tzcnt(occupancy[sourceWord]);
+-            return (sourceWord << 6) + bit;
+-        }
+-
+-        private static void SetByteBucketOccupied(
+-            ulong* occupancy,
+-            ref uint occupiedWordMask,
+-            int bucket)
+-        {
+-            int word = bucket >> 6;
+-            occupancy[word] |= 1UL << (bucket & 63);
+-            occupiedWordMask |= 1u << word;
+-        }
+-
+-        private static void ClearByteBucket(
+-            int* heads,
+-            ulong* occupancy,
+-            ref uint occupiedWordMask,
+-            int bucket)
+-        {
+-            heads[bucket] = -1;
+-            int word = bucket >> 6;
+-            occupancy[word] &= ~(1UL << (bucket & 63));
+-            if (occupancy[word] == 0)
+-            {
+-                occupiedWordMask &= ~(1u << word);
+-            }

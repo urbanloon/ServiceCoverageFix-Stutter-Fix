@@ -1,0 +1,6 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -646,2 +646 @@
+-            uint mask = (uint)(~(int)priority >> 31) & 0x7FFFFFFFu;
+-            return math.asfloat(priority ^ mask);
++            return math.asfloat(priority < 0x80000000u ? priority ^ 0x7FFFFFFFu : priority);

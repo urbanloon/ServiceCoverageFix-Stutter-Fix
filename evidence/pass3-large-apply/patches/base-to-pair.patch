@@ -1,0 +1,91 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -362,12 +362,15 @@
+-            while (occupiedWordMask != 0)
+-            {
+-                // The strongest competitor stays fixed until this provider
+-                // loses or exhausts its budget. An equal or unordered next
+-                // key keeps the winner, matching vanilla's ordered '<' test.
+-                int runnerUp = ByteTakeWinner(slots, heads, tails, minimums, occupancy,
+-                    ref occupiedWordMask, ref lastPriority);
+-                float cutoff = elements[slots[runnerUp].State.NextIndex].AverageCoverage;
+-                ProviderState* state = &slots[winner].State;
+-                ProviderState local = *state;
+-                int cursor = local.NextIndex;
+-                int end = local.EndIndex;
++            int runner = ByteTakeWinner(slots, heads, tails, minimums, occupancy,
++                ref occupiedWordMask, ref lastPriority);
++            float cutoff = elements[slots[runner].State.NextIndex].AverageCoverage;
++            while (true)
++            {
++                // The third provider stays fixed while the front pair alternates.
++                bool hasThird = occupiedWordMask != 0;
++                int third = -1;
++                float floor = 0f;
++                if (hasThird)
++                {
++                    third = ByteTakeWinner(slots, heads, tails, minimums, occupancy,
++                        ref occupiedWordMask, ref lastPriority);
++                    floor = elements[slots[third].State.NextIndex].AverageCoverage;
++                }
+@@ -376,5 +379,18 @@
+-                    int index = cursor++;
+-                    bool hasNext = cursor != end;
+-                    float next = hasNext ? elements[cursor].AverageCoverage : 0f;
+-                    bool live = ApplyElement(&local, elements + index);
+-                    if (!live || !hasNext)
++                    ProviderState* state = &slots[winner].State;
++                    ProviderState local = *state;
++                    int cursor = local.NextIndex;
++                    int end = local.EndIndex;
++                    bool hasNext;
++                    float next;
++                    do
++                    {
++                        int index = cursor++;
++                        hasNext = cursor != end;
++                        next = hasNext ? elements[cursor].AverageCoverage : 0f;
++                        if (!ApplyElement(&local, elements + index)) hasNext = false;
++                    }
++                    while (hasNext && !(next < cutoff));
++                    state->NextIndex = cursor;
++                    state->Remaining = local.Remaining;
++
++                    if (!hasNext)
+@@ -383,4 +399,11 @@
+-                        break;
+-                    }
+-                    if (!(next < cutoff))
+-                    {
++                        if (!hasThird)
++                            return skipped + ExecuteSingleProvider(&slots[runner].State, elements);
++                    }
++                    else if (!hasThird || !(next < floor))
++                    {
++                        // The old winner lost to the runner but remains ahead
++                        // of the third. Its equality wins the reinsert tie.
++                        int previous = winner;
++                        winner = runner;
++                        runner = previous;
++                        cutoff = next;
+@@ -389,4 +412,9 @@
+-
+-                    uint priority = GetPriority(next);
+-                    BytePrepend(slots, heads, tails, minimums, occupancy,
+-                        ref occupiedWordMask, winner, GetByteBucket(priority, lastPriority), priority);
++                    else
++                    {
++                        uint priority = GetPriority(next);
++                        BytePrepend(slots, heads, tails, minimums, occupancy,
++                            ref occupiedWordMask, winner, GetByteBucket(priority, lastPriority), priority);
++                    }
++                    winner = runner;
++                    runner = third;
++                    cutoff = floor;
+@@ -395,5 +423 @@
+-                state->NextIndex = cursor;
+-                state->Remaining = local.Remaining;
+-                winner = runnerUp;
+-            }
+-            return skipped + ExecuteSingleProvider(&slots[winner].State, elements);
++            }

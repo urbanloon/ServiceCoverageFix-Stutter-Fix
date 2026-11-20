@@ -1,0 +1,3 @@
+session_date,report_archive_sha256,enabled_local_time,reported_version,mod_log_lines,observed_game_load_local_time,completed_saves,per_service_timing_records
+2026-11-17,9dde41aac217d54b4e69ffad084d72a334a13f89bcf4cdf9350870b79bb5ff67,"16:06:45,109",0.3.3.0,2,"16:10:35,109",3,0
+2026-11-18,591e9d83f06c8b02cf2a44a7c2491e69bf505ee5ba09b7973bd9cc834777e483,"09:13:46,722",0.3.3.0,2,"09:18:24,092",48,0

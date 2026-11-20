@@ -1,0 +1,14 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -369 +369 @@
+-                float cutoff = elements[slots[runnerUp].State.NextIndex].AverageCoverage;
++                float cutoff = CoverageFromPriority(lastPriority);
+@@ -641,0 +642,8 @@
++        // The radix queue has already resolved this exact value when it pops
++        // the runner. Zero encodings compare equally in the active float mode.
++        private static float CoverageFromPriority(uint priority)
++        {
++            uint mask = (uint)(~(int)priority >> 31) & 0x7FFFFFFFu;
++            return math.asfloat(priority ^ mask);
++        }
++

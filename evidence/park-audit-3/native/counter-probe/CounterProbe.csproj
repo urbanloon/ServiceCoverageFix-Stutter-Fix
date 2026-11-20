@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><AllowUnsafeBlocks>true</AllowUnsafeBlocks><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(RepoRoot)/tests/game_compare/Inputs.cs" />
+    <Compile Include="$(RepoRoot)/tests/burst_compare/NativeWorker.cs" />
+    <Compile Include="$(RepoRoot)/tests/burst_compare/VerifiedWorkers.cs" />
+  </ItemGroup>
+</Project>

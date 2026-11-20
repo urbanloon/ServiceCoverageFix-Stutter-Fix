@@ -1,0 +1,9 @@
+target,shape,stock_sort,pairs,median_stock_cpu_ms,median_floor_ratio,median_precomputed_ratio,median_pointer_sort_ratio
+AVX2,local,0,36,4.227,0.366,1.188,
+AVX2,local,1,36,86.321,0.926,1.043,1.022
+AVX2,random,0,36,4.933,0.365,1.19,
+AVX2,random,1,36,84.267,0.936,1.0,1.001
+X64_SSE4,local,0,36,4.364,0.386,1.177,
+X64_SSE4,local,1,36,84.208,0.937,1.023,1.025
+X64_SSE4,random,0,36,4.609,0.379,1.117,
+X64_SSE4,random,1,36,82.952,0.928,0.989,0.993

@@ -1,0 +1,20 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -357 +357 @@
+-                    GetByteBucket(priority, lastPriority), priority);
++                    GetByteBucket(priority, lastPriority), priority, math.asuint(first));
+@@ -369 +369 @@
+-                float cutoff = elements[slots[runnerUp].State.NextIndex].AverageCoverage;
++                float cutoff = math.asfloat(slots[runnerUp].Node.Priority);
+@@ -392 +392 @@
+-                        ref occupiedWordMask, winner, GetByteBucket(priority, lastPriority), priority);
++                        ref occupiedWordMask, winner, GetByteBucket(priority, lastPriority), priority, math.asuint(next));
+@@ -452 +452 @@
+-                uint priority = slots[current].Node.Priority;
++                uint priority = GetPriority(math.asfloat(slots[current].Node.Priority));
+@@ -479 +479 @@
+-            uint priority)
++            uint priority, uint rawCoverage)
+@@ -483 +483 @@
+-            slots[providerIndex].Node.Priority = priority;
++            slots[providerIndex].Node.Priority = rawCoverage;

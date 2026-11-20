@@ -1,0 +1,5 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -322 +322 @@
+-        private const int NearShift = 0;
++        private const int NearShift = 3;

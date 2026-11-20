@@ -1,0 +1,19 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -153 +153,4 @@
+-                skipped = ExecuteByteRadixMerge(slots, elements, recordCount);
++                int originalAvailable = workload.Available;
++                skipped = ExecuteByteRadixMerge(slots, elements, recordCount, out workload.Available, out workload.Reserved);
++                workload.Processed = originalAvailable - skipped;
++                return workload;
+@@ -316,2 +319,4 @@
+-            int recordCount)
+-        {
++            int recordCount, out int bypass, out int losses)
++        {
++            bypass = 0;
++            losses = 0;
+@@ -395,0 +401 @@
++                    if (hasNext) losses++;
+@@ -403,0 +410 @@
++                        bypass++;

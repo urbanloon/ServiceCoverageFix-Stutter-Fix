@@ -1,0 +1,29 @@
+variant,target,denormal_mode,check,cases,visits
+0.3.6,AVX2,process default,all counters; raw bytes; guards,396,504234
+0.3.6,X64_SSE4,process default,all counters; raw bytes; guards,396,504234
+inverse,AVX2,daz-ftz,stock and 0.3.6 and candidate output; counters and guards,396,494190
+inverse,AVX2,daz,stock and 0.3.6 and candidate output; counters and guards,396,494190
+inverse,AVX2,ftz,stock and 0.3.6 and candidate output; counters and guards,396,502497
+inverse,AVX2,preserve,stock and 0.3.6 and candidate output; counters and guards,396,504234
+inverse,X64_SSE4,daz-ftz,stock and 0.3.6 and candidate output; counters and guards,396,494190
+inverse,X64_SSE4,daz,stock and 0.3.6 and candidate output; counters and guards,396,494190
+inverse,X64_SSE4,ftz,stock and 0.3.6 and candidate output; counters and guards,396,502497
+inverse,X64_SSE4,preserve,stock and 0.3.6 and candidate output; counters and guards,396,504234
+stock,AVX2,process default,protected pages,40,
+v036,AVX2,process default,protected pages,40,
+stock,X64_SSE4,process default,protected pages,40,
+v036,X64_SSE4,process default,protected pages,40,
+inverse,AVX2,process default,protected pages,40,
+inverse,X64_SSE4,process default,protected pages,40,
+pair,AVX2,daz-ftz,stock and 0.3.6 and candidate output; counters and guards,396,494190
+pair,AVX2,daz,stock and 0.3.6 and candidate output; counters and guards,396,494190
+pair,AVX2,ftz,stock and 0.3.6 and candidate output; counters and guards,396,502497
+pair,AVX2,preserve,stock and 0.3.6 and candidate output; counters and guards,396,504234
+pair,AVX2,process default,protected pages,40,
+pair,X64_SSE4,daz-ftz,stock and 0.3.6 and candidate output; counters and guards,396,494190
+pair,X64_SSE4,daz,stock and 0.3.6 and candidate output; counters and guards,396,494190
+pair,X64_SSE4,ftz,stock and 0.3.6 and candidate output; counters and guards,396,502497
+pair,X64_SSE4,preserve,stock and 0.3.6 and candidate output; counters and guards,396,504234
+pair,X64_SSE4,process default,protected pages,40,
+pair,AVX2,process default,three-frontier counters; target bytes; guards,24576,540672
+pair,X64_SSE4,process default,three-frontier counters; target bytes; guards,24576,540672

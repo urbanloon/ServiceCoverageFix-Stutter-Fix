@@ -26,9 +26,9 @@ public static unsafe class BurstSort
             Priority == other.Priority ? 0 : Priority < other.Priority ? 1 : -1;
     }
 
-    // The offline binder changes only the generic argument of this Sort<T> call
-    // to the actual private Game.Simulation.ServiceCoverageSystem+CoverageElement.
-    static void GameSort(Element* data, int count) => NativeSortExtension.Sort(data, count);
+    // The binder instantiates both operations with the game's private element.
+    static void GameSort(Element* data, int count) =>
+        NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<Element>(data, count, Allocator.None).Sort();
 
     struct RadixKey
     {
@@ -121,7 +121,7 @@ public static unsafe class BurstSort
             }
             for (int i = 0; i < count; i++)
                 keys[i] = new Descriptor { Priority = first[i].Priority, Source = i };
-            NativeSortExtension.Sort(keys, count);
+            NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<Descriptor>(keys, count, Allocator.None).Sort();
             if (method == 2)
             {
                 for (int i = 0; i < count; i++) ordered[i] = first[keys[i].Source];

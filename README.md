@@ -15,6 +15,10 @@ retaining the coverage calculation and surrounding job schedule. It does not
 remove, approximate, delay, parallelize, or reduce service-coverage
 calculations.
 
+## Park-heavy city audit
+
+The [park audit](evidence/park-audit-3/REPORT.md) covers shared-road workloads, historical thread waits, the corrected vanilla Process sort benchmark and independent save-safety checks. Open `ServiceCoverageFix.sln` and build **Release** with the Cities: Skylines II mod toolchain.
+
 ## Technical index
 
 | Resource | Contents |

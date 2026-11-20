@@ -1,0 +1,16 @@
+corpus,seed,providers,shape,visited,losing_switches,pair_bypasses
+standard,13171,526,inter,510220,508722,916
+standard,13171,526,budget,510220,508557,1022
+standard,13171,526,ties,510220,3675,7
+standard,13171,526,richinter,510220,499097,939
+standard,13171,526,mixed,510220,504490,4671
+standard,13171,526,runs,510220,441342,67852
+standard,13171,64,mixed,32000,29451,2341
+standard,13171,64,richinter,32000,30888,483
+standard,13171,64,runs,32000,0,0
+standard,13171,64,ties,32000,441,7
+standard,13171,32,inter,4096,3923,129
+shared-road,682731,526,global,1111964,1109222,2108
+shared-road,682731,526,local,1111964,1109221,2123
+shared-road,682731,526,ties,1093981,7740,15
+shared-road,682731,526,tight,1528,989,10

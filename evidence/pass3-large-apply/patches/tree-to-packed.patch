@@ -1,0 +1,83 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -664,7 +664,5 @@
+-            int* losers = stackalloc int[MaxLeaves];
+-            int* providers = stackalloc int[MaxLeaves];
+-            if (math.isnan(elements[slots[0].State.NextIndex].AverageCoverage))
+-                return ExecuteOrderedMerge(slots, elements, count);
+-            for (int leaf = 0; leaf < n; leaf++)
+-            {
+-                float first = elements[slots[leaf + 1].State.NextIndex].AverageCoverage;
++            ulong* ranks = stackalloc ulong[MaxLeaves];
++            int* entries = stackalloc int[MaxLeaves];
++            for (int i = 0; i < count; i++)
++            {
++                float first = elements[slots[i].State.NextIndex].AverageCoverage;
+@@ -673,5 +671,3 @@
+-                slots[leaf].Node.Next = unchecked((int)0x80000000) + leaf;
+-                slots[leaf].Node.Priority = GetPriority(first);
+-            }
+-
+-            // This temporary winners table becomes the leaf-to-provider map.
++                slots[i].Node.Priority = GetPriority(first);
++            }
++            // Initial leaves occur in vanilla's concrete strongest-first order.
+@@ -682,16 +678,9 @@
+-                left = left >= n ? left - n : providers[left];
+-                right = right >= n ? right - n : providers[right];
+-                if (*(ulong*)&slots[right].Node < *(ulong*)&slots[left].Node)
+-                {
+-                    providers[node] = right;
+-                    losers[node] = left;
+-                }
+-                else
+-                {
+-                    providers[node] = left;
+-                    losers[node] = right;
+-                }
+-            }
+-            int top = providers[1];
+-            for (int i = 0; i < n; i++) providers[i] = i + 1;
+-
++                left = left >= n ? left - n : slots[left].Node.Next;
++                right = right >= n ? right - n : slots[right].Node.Next;
++                int lostLeaf = math.max(left, right);
++                slots[node].Node.Next = math.min(left, right);
++                ranks[node] = ((ulong)slots[lostLeaf + 1].Node.Priority << 32) | (0x80000000u + (uint)lostLeaf);
++                entries[node] = (lostLeaf << 16) | (lostLeaf + 1);
++            }
++            int top = 1;
++            ulong topRank = ((ulong)slots[1].Node.Priority << 32) | 0x80000000u;
+@@ -704,2 +693,4 @@
+-                int runner = providers[top];
+-                float cutoff = CoverageFromPriority(slots[top].Node.Priority);
++                int runner = top & 0xFFFF;
++                int node = ((top >> 16) + n) >> 1;
++                top = (top & ~0xFFFF) | winner;
++                float cutoff = CoverageFromPriority((uint)(topRank >> 32));
+@@ -719 +710 @@
+-                        *(ulong*)&slots[top].Node = ulong.MaxValue;
++                        topRank = ulong.MaxValue;
+@@ -726,3 +717 @@
+-                    slots[top].Node.Next = ticket--;
+-                    slots[top].Node.Priority = GetPriority(next);
+-                    providers[top] = winner;
++                    topRank = ((ulong)GetPriority(next) << 32) | (uint)ticket--;
+@@ -734,2 +722,0 @@
+-                ulong rank = *(ulong*)&slots[top].Node;
+-                int node = (top + n) >> 1;
+@@ -738,5 +725,6 @@
+-                    int rival = losers[node];
+-                    ulong rivalRank = *(ulong*)&slots[rival].Node;
+-                    if (rivalRank < rank)
+-                    {
+-                        losers[node] = top;
++                    ulong rivalRank = ranks[node];
++                    if (rivalRank < topRank)
++                    {
++                        int rival = entries[node];
++                        entries[node] = top;
++                        ranks[node] = topRank;
+@@ -744 +732 @@
+-                        rank = rivalRank;
++                        topRank = rivalRank;

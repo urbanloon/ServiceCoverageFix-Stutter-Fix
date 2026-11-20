@@ -12,11 +12,13 @@ The resolved type, field and method-instruction listings are identical across th
 
 In the archived ETW review, the stock simulation and Park infoview captures had 0 and 3 matched Prepare leaves, and 5 and 12 Clear leaves, across the full respective recordings. Parallel Process spans had run medians of 3.19–5.25 ms in the seven heavy-episode captures. The identified sorting routines contributed 22–29% of Process samples. The historical infoview capture’s median Apply span was 77.99 ms. CPU sample shares cannot be multiplied by elapsed time to obtain a frame-time saving.
 
-## Native sorting results
+## Historical pointer-overload sorting results
+
+The following earlier timing table used the pointer overload of Unity's sort. The game's Process job calls the NativeArray overload, which enters a distinct native introsort implementation. Updated comparisons with the exact stock overload are in [the Process audit](array-baseline/README.md).
 
 One CPU core processed arrays of synthetic provider slices. The two scales combine a 421-provider workload with the prior 1,111,964-record Process benchmark size, and the logged Providence Bay input capacity of 523 providers and 1,467,894 records. This benchmark sorts all generated records. Actual Process can filter records before sorting.
 
-The table gives paired median speedups at the two scales, in that order. Values above 1 favor the candidate. Both the baseline and candidates ran as Linux AVX2 machine code produced by Unity Burst 1.8.23. Baseline instantiation uses the actual private game CoverageElement, its actual CompareTo and Unity’s NativeSort method. Each timed output was compared byte-for-byte, including identity and 32-byte stride, with an independent .NET execution of the supplied game/Unity methods.
+The table gives paired median speedups at the two scales, in that order. Values above 1 favor the candidate. Both the baseline and candidates ran as Linux AVX2 machine code produced by Unity Burst 1.8.23. The historical baseline instantiates the actual private game CoverageElement and its CompareTo in Unity's pointer-based NativeSort. Each timed output was compared byte-for-byte, including identity and 32-byte stride, with an independent .NET execution of that pointer overload.
 
 | Input within each provider | Strict descending guard | Compact descriptors + gather | Compact descriptors + cycles | Four-pass radix, unique only |
 |---|---:|---:|---:|---:|
@@ -44,7 +46,7 @@ CoverageJobs.ProcessResultsJob consolidates lane costs into first-seen road-edge
 
 ## Reproduction
 
-Prerequisites are Linux x86-64 with AVX2, an available CPU core, .NET SDK 8, .NET 10 runtime, the Unity Burst 1.8.23 package, and the matching game Managed directory including Colossal.Mono.Cecil. Recorded runs used AMD EPYC 9V74, core 6, .NET SDK 8.0.419, one warmup, fixed seeds and randomized method order within each round. There are 15 paired timed rounds per native case and 13 per managed case. Allocation, input resets and byte verification are outside the timed interval. Scratch arrays are shared successively by simulated providers on the same thread. The runs exclude ECS lookups, job scheduling and cross-worker memory pressure.
+Prerequisites are Linux x86-64 with AVX2, an available CPU core, .NET SDK 8, .NET 10 runtime, the Unity Burst 1.8.23 package, and the matching game Managed directory including Colossal.Mono.Cecil. The historical pointer-overload runs used AMD EPYC 9V74, core 6, .NET SDK 8.0.419, one warmup, fixed seeds and randomized method order within each round. There are 15 paired timed rounds per native case and 13 per managed case. Allocation, input resets and byte verification are outside the timed interval. Scratch arrays are shared successively by simulated providers on the same thread. The runs exclude ECS lookups, job scheduling and cross-worker memory pressure.
 
 Set GAME_MANAGED, DOTNET8, BURST_PACKAGE and DOTNET10 to absolute local paths. From this folder run:
 
@@ -64,7 +66,7 @@ done
 python3 summarize.py "$out"/burst-*.csv "$out"/radix-*.csv
 ```
 
-The binder rewrites the generic argument of one call in the benchmark assembly, then writes a separate benchmark DLL consumed by Burst. The historical and current original game assemblies are opened read-only. To reproduce the structural comparison on each Managed directory:
+The corrected binder instantiates both the borrowed NativeArray view and its sort with the private game element type, then writes a separate benchmark DLL consumed by Burst. The historical and current original game assemblies are opened read-only. To reproduce the structural comparison on each Managed directory:
 
 ```bash
 inspector=native/bind/bin/Release/net8.0/BindGame.dll

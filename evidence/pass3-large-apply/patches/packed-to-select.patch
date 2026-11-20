@@ -1,0 +1,17 @@
+--- a/src/OptimizedApplyCoverageJob.cs
++++ b/src/OptimizedApplyCoverageJob.cs
+@@ -726,8 +726,6 @@
+-                    if (rivalRank < topRank)
+-                    {
+-                        int rival = entries[node];
+-                        entries[node] = top;
+-                        ranks[node] = topRank;
+-                        top = rival;
+-                        topRank = rivalRank;
+-                    }
++                    int rival = entries[node];
++                    bool rivalWins = rivalRank < topRank;
++                    entries[node] = rivalWins ? top : rival;
++                    ranks[node] = rivalWins ? topRank : rivalRank;
++                    top = rivalWins ? rival : top;
++                    topRank = rivalWins ? rivalRank : topRank;

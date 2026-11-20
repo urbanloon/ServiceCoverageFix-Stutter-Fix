@@ -1,11 +1,11 @@
 using System.Diagnostics;
 using System.Reflection;
-using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Security.Cryptography;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 
 unsafe class Program
 {
@@ -50,19 +50,16 @@ unsafe class Program
         }
         if (Marshal.SizeOf(element) != sizeof(Element) || (int)Marshal.OffsetOf(element, "m_AverageCoverage") != 16)
             throw new Exception("CoverageElement ABI mismatch");
-        var sort = typeof(NativeSortExtension).GetMethods().Single(m => m.Name == "Sort" &&
-            m.IsGenericMethodDefinition && m.GetGenericArguments().Length == 1 &&
-            m.GetParameters().Length == 2 && m.GetParameters()[0].ParameterType.IsPointer);
-        var thunk = new DynamicMethod("SortGameCoverageElements", typeof(void),
-            new[]{typeof(Element*), typeof(int)}, typeof(Program), true);
-        var il = thunk.GetILGenerator();
-        il.Emit(OpCodes.Ldarg_0);
-        il.Emit(OpCodes.Ldarg_1);
-        il.Emit(OpCodes.Call, sort.MakeGenericMethod(element));
-        il.Emit(OpCodes.Ret);
+        var sort = typeof(Program).GetMethod(nameof(SortGameRange), BindingFlags.Static | BindingFlags.NonPublic);
         foreach (var dll in new[] {game.Location, typeof(NativeSortExtension).Assembly.Location})
             Console.Error.WriteLine($"{Path.GetFileName(dll)} sha256={Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dll))).ToLowerInvariant()}");
-        return (ActualSort)thunk.CreateDelegate(typeof(ActualSort));
+        return sort.MakeGenericMethod(element).CreateDelegate<ActualSort>();
+    }
+
+    static void SortGameRange<T>(Element* first, int count) where T : unmanaged, IComparable<T>
+    {
+        // ProcessCoverageJob sorts a borrowed NativeArray subrange.
+        NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>(first, count, Allocator.None).Sort();
     }
 
     enum Method { Vanilla, StrictGuard, CompactCopy, CompactCycle, UniqueRadix }
@@ -90,7 +87,7 @@ unsafe class Program
         }
         for (int i = 0; i < n; i++)
             descriptors[i] = new Descriptor { Priority = first[i].Priority, Source = i };
-        NativeSortExtension.Sort(descriptors, n);
+        NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<Descriptor>(descriptors, n, Allocator.None).Sort();
         if (method == Method.CompactCopy)
         {
             for (int i = 0; i < n; i++)
