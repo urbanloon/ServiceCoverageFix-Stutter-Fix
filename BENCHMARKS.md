@@ -1,10 +1,17 @@
-# ServiceCoverageFix 0.3.1 selector benchmark
+# Four-level byte-radix selector development benchmark
 
 ## Scope
 
-This benchmark isolates the provider selector that dominated the post-fix ETW
+This benchmark records the unpublished design study that selected the
+four-level byte-radix algorithm later used by the published 0.3.2 build. There
+was no published or tested 0.3.1 build.
+
+The benchmark isolates the provider selector that dominated the post-fix ETW
 samples. It is not a prediction of total in-game frame time: the coverage
 pointer reads, writes, and floating-point budget math are deliberately excluded.
+Its compact prototype memory layout also differs from the record-local layout
+shipped in 0.3.2, so these numbers are not presented as a direct benchmark of
+the published binary.
 
 The native harness models both measured heavy passes:
 
@@ -17,10 +24,13 @@ the real 32-byte element stride. Every candidate's complete provider-selection
 sequence is compared with the reference before timing. Measurements use 41
 randomized-order rounds.
 
-## Selected design
+## Development result
 
 The selected four-level byte-radix queue with a 4,096-event/5% adaptive winner
-probe measured the following speedups against the v0.2 33-bucket selector:
+probe measured the following speedups against the unpublished compact 0.2.0
+33-bucket development selector. That baseline retained the 0.1.8 selection
+algorithm but included later hot-loop layout experiments, so this is not a
+direct comparison with the published 0.1.8 binary.
 
 | Workload | Selector speedup | Queue selections |
 |---|---:|---:|
@@ -38,8 +48,9 @@ workload's paired confidence interval remained above 1.0.
 
 The original game's extreme linear shifting is evidence that the problematic
 Park stream is highly interleaved. Byte radix remained faster in both modeled
-high-interleave cases without relying on a prefetch intrinsic. This remains a
-selector-only native result until a Release/Burst build is captured in game.
+high-interleave cases without relying on a prefetch intrinsic. These values
+remain selector-only development results. The published 0.3.2 in-game
+measurements are recorded separately in `README.md`.
 
 ## Adaptive policy
 
@@ -84,8 +95,11 @@ stage while greatly expanding the patch boundary.
   1,025 buckets.
 - Reverse prepend, append redistribution, and prepend reinsertion retain the
   exact concrete tie order.
-- Forward compaction transforms each disposable 24-byte provider record into a
-  16-byte state and uses its reclaimed 8 bytes for one node. The regions exactly
-  fit the original allocation and remove the prior provider cap/fallback.
+- The benchmark candidate used forward compaction to transform each disposable
+  24-byte provider record into a 16-byte state and reclaim 8 bytes per provider
+  for a separate node array.
+- Published 0.3.2 does not use that cross-record prototype layout. Each original
+  record independently stores its own 8-byte queue node and 16-byte provider
+  state, so no write crosses a record boundary.
 - Exhaustive small-domain, byte-boundary, random 32-bit, dense-tie, and
   large-provider property tests compare the entire output sequence.
