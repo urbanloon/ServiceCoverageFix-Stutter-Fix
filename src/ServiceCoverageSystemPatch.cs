@@ -16,6 +16,9 @@ namespace ServiceCoverageFix
     {
         internal static int ReplacementCount { get; private set; }
 
+        internal static bool? ServiceBindingAvailable { get; private set; }
+        internal static void Reset() { ReplacementCount = 0; ServiceBindingAvailable = null; }
+
         private static MethodBase TargetMethod()
         {
             return AccessTools.Method(CompatibilityGate.ServiceCoverageSystemType, "OnUpdate")
@@ -25,67 +28,118 @@ namespace ServiceCoverageFix
         }
 
         private static IEnumerable<CodeInstruction> Transpiler(
-            IEnumerable<CodeInstruction> instructions)
+            IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
-            MethodInfo bridgeDefinition = AccessTools.Method(
-                typeof(ApplyCoverageScheduleBridge),
-                nameof(ApplyCoverageScheduleBridge.ScheduleOptimized))
-                ?? throw new MissingMethodException(
-                    typeof(ApplyCoverageScheduleBridge).FullName,
-                    nameof(ApplyCoverageScheduleBridge.ScheduleOptimized));
-
-            int replacements = 0;
-            foreach (CodeInstruction instruction in instructions)
-            {
-                if (instruction.opcode == OpCodes.Call &&
-                    instruction.operand is MethodInfo calledMethod &&
-                    IsApplyCoverageSchedule(calledMethod, out Type? applyJobType))
-                {
-                    instruction.operand = bridgeDefinition.MakeGenericMethod(applyJobType!);
-                    replacements++;
-                }
-
-                yield return instruction;
-            }
-
-            if (replacements != 1)
-            {
-                throw new InvalidOperationException(
-                    $"Expected exactly one ApplyCoverageJob Schedule call, found {replacements}.");
-            }
-
-            ReplacementCount = replacements;
+            var code = ReplaceSchedule(instructions, generator, false, out bool bound);
+            ServiceBindingAvailable = bound;
+            ReplacementCount = 1;
+            return code;
         }
 
-        private static bool IsApplyCoverageSchedule(MethodInfo method, out Type? applyJobType)
+        internal static IEnumerable<CodeInstruction> ReplaceSchedule(
+            IEnumerable<CodeInstruction> instructions, ILGenerator generator, bool preview, out bool bound)
         {
-            applyJobType = null;
-            if (method.Name != nameof(IJobExtensions.Schedule) ||
-                method.DeclaringType != typeof(IJobExtensions) ||
-                !method.IsGenericMethod)
+            var code = new List<CodeInstruction>(instructions);
+            var applySites = code.FindAll(i => IsSchedule(i, CompatibilityGate.ApplyCoverageJobName));
+            if (applySites.Count != 1)
+                throw new InvalidOperationException($"Expected exactly one ApplyCoverageJob Schedule call, found {applySites.Count}.");
+            var apply = applySites[0];
+            var applyJobType = ((MethodInfo)apply.operand!).GetGenericArguments()[0];
+            string entry = preview ? nameof(ApplyCoverageScheduleBridge.SchedulePreview) : nameof(ApplyCoverageScheduleBridge.ScheduleOptimized);
+            var bridge = AccessTools.Method(typeof(ApplyCoverageScheduleBridge), entry)!
+                .MakeGenericMethod(applyJobType);
+
+            var prepareSites = code.FindAll(i => IsSchedule(i, CompatibilityGate.ServiceCoverageSystemName + "+PrepareCoverageJob"));
+            FieldInfo? serviceField = null;
+            if (prepareSites.Count == 1)
             {
-                return false;
+                int start = code.IndexOf(prepareSites[0]);
+                int end = code.IndexOf(apply);
+                // Both calls must lie on one straight-line path. Alternate
+                // control flow could otherwise reach Apply with a stale local.
+                bool singlePath = start < end && code[start].blocks.Count == 0;
+                for (int i = start + 1; singlePath && i <= end; i++)
+                    singlePath = code[i].labels.Count == 0 && code[i].blocks.Count == 0 &&
+                        code[i].opcode.FlowControl != FlowControl.Branch &&
+                        code[i].opcode.FlowControl != FlowControl.Cond_Branch;
+                if (singlePath)
+                {
+                    Type prepare = ((MethodInfo)prepareSites[0].operand!).GetGenericArguments()[0];
+                    var field = prepare.GetField("m_Service", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (field?.FieldType == typeof(Game.Net.CoverageService) &&
+                        Enum.GetUnderlyingType(field.FieldType) == typeof(byte)) serviceField = field;
+                }
             }
 
+            if (preview && serviceField == null)
+                throw new InvalidOperationException("Could not bind the service on the scheduled preview PrepareCoverageJob.");
+            LocalBuilder? service = null;
+            if (serviceField != null)
+            {
+                var dependency = generator.DeclareLocal(typeof(JobHandle));
+                service = generator.DeclareLocal(typeof(int));
+                CodeInstruction prepare = prepareSites[0];
+                var originalCall = new CodeInstruction(prepare.opcode, prepare.operand);
+                // Preserve entry labels and exception metadata on the first
+                // operation. Read m_Service from the exact value being scheduled.
+                prepare.opcode = OpCodes.Stloc;
+                prepare.operand = dependency;
+                code.InsertRange(code.IndexOf(prepare) + 1, new[] {
+                    new CodeInstruction(OpCodes.Dup), new CodeInstruction(OpCodes.Ldfld, serviceField),
+                    new CodeInstruction(OpCodes.Stloc, service), new CodeInstruction(OpCodes.Ldloc, dependency), originalCall
+                });
+            }
+
+            // A changed Prepare site disables attribution only. A value of -1
+            // still schedules the fix and leaves all service rows unattributed.
+            apply.opcode = service == null ? OpCodes.Ldc_I4_M1 : OpCodes.Ldloc;
+            apply.operand = service;
+            code.Insert(code.IndexOf(apply) + 1, new CodeInstruction(OpCodes.Call, bridge));
+            bound = service != null;
+            return code;
+        }
+
+        private static bool IsSchedule(CodeInstruction instruction, string jobName)
+        {
+            if (instruction.opcode != OpCodes.Call || !(instruction.operand is MethodInfo method) ||
+                method.Name != nameof(IJobExtensions.Schedule) || method.DeclaringType != typeof(IJobExtensions) ||
+                !method.IsGenericMethod || method.ReturnType != typeof(JobHandle)) return false;
             Type[] arguments = method.GetGenericArguments();
-            if (arguments.Length != 1 ||
-                arguments[0].FullName != CompatibilityGate.ApplyCoverageJobName)
-            {
-                return false;
-            }
+            ParameterInfo[] parameters = method.GetParameters();
+            return arguments.Length == 1 && arguments[0].FullName == jobName &&
+                parameters.Length == 2 && parameters[0].ParameterType == arguments[0] &&
+                parameters[1].ParameterType == typeof(JobHandle);
+        }
+    }
 
-            applyJobType = arguments[0];
-            return true;
+    [HarmonyPatch]
+    internal static class ServiceCoveragePreviewPatch
+    {
+        internal static int ReplacementCount { get; private set; }
+
+        internal static void Reset() => ReplacementCount = 0;
+
+        private static MethodBase TargetMethod() =>
+            AccessTools.Method(CompatibilityGate.CoveragePreviewSystemType!, "OnUpdate")
+            ?? throw new MissingMethodException("Game.Tools.CoveragePreviewSystem", "OnUpdate");
+
+        private static IEnumerable<CodeInstruction> Transpiler(
+            IEnumerable<CodeInstruction> instructions, ILGenerator generator)
+        {
+            var code = ServiceCoverageSystemPatch.ReplaceSchedule(instructions, generator, true, out _);
+            ReplacementCount = 1;
+            return code;
         }
     }
 
     internal static class ApplyCoverageScheduleBridge
     {
         private static int _fallbackLogged;
+        private static int _previewFallbackLogged;
 
         internal static void ValidateBridge(Type applyJobType)
         {
-            _fallbackLogged = 0;
+            _fallbackLogged = _previewFallbackLogged = 0;
             MethodInfo method = typeof(ApplyCoverageScheduleBridge).GetMethod(
                 nameof(ValidateBridgeTyped), BindingFlags.Static | BindingFlags.NonPublic)!;
             try { method.MakeGenericMethod(applyJobType).Invoke(null, null); }
@@ -95,8 +149,9 @@ namespace ServiceCoverageFix
 
         private static unsafe void ValidateBridgeTyped<TApplyJob>() where TApplyJob : struct, IJob
         {
-            // Exercise field delegates, container copying, Unity scheduling, and
-            // actual worker execution using isolated data, never city buffers.
+            // Exercise field delegates, container copying and synchronous Unity job
+            // execution using isolated data. Run returns after execution, so even
+            // a failed probe cannot outlive its temporary buffers.
             foreach (int count in new[] { 0, 1, 2 })
             {
                 using (var buildings = new NativeList<RawBuildingData>(Math.Max(1, count), Allocator.TempJob))
@@ -122,14 +177,12 @@ namespace ServiceCoverageFix
                         UnsafeUtility.AddressOf(ref elementCopy), UnsafeUtility.SizeOf<NativeList<RawCoverageElement>>());
                     OptimizedApplyCoverageJob job = CreateOptimized(ref original);
                     job.Diagnostics = (ExecutionCounters*)NativeArrayUnsafeUtility.GetUnsafePtr(counters);
-                    IJobExtensions.Schedule(job, default).Complete();
+                    IJobExtensions.Run(job);
                     if (counters[0].Started != 1 || counters[0].Completed != 1)
                         throw new InvalidOperationException("Replacement execution was not observed during preflight.");
                     for (int i = 0; i < count; i++)
                         if (targets[i].x != 1f || targets[i].y != 1f)
                             throw new InvalidOperationException("Coverage bridge preflight returned incorrect coverage.");
-                    if (counters[0].Managed != 0)
-                        Mod.Log.Info("Coverage preflight executed in managed mode; live execution mode will be tracked.");
                 }
             }
         }
@@ -146,28 +199,33 @@ namespace ServiceCoverageFix
             };
         }
 
-        public static JobHandle ScheduleOptimized<TApplyJob>(
-            TApplyJob originalJob,
-            JobHandle dependency)
+        public static JobHandle ScheduleOptimized<TApplyJob>(TApplyJob originalJob, JobHandle dependency, int service = -1)
+            where TApplyJob : struct, IJob => Schedule(originalJob, dependency, service, false);
+
+        public static JobHandle SchedulePreview<TApplyJob>(TApplyJob originalJob, JobHandle dependency, int service)
+            where TApplyJob : struct, IJob => Schedule(originalJob, dependency, service, true);
+
+        private static JobHandle Schedule<TApplyJob>(TApplyJob originalJob, JobHandle dependency, int service, bool preview)
             where TApplyJob : struct, IJob
         {
             RuntimeDiagnostics.ReportTransition();
             try
             {
-                return RuntimeDiagnostics.Schedule(CreateOptimized(ref originalJob), dependency);
+                return RuntimeDiagnostics.Schedule(CreateOptimized(ref originalJob), dependency, service, preview);
             }
             catch (Exception exception)
             {
                 // Reporting is best-effort. Even exception formatting or the
                 // logger itself may throw; neither may prevent vanilla work.
-                try { RuntimeDiagnostics.RecordFallback(exception); }
+                try { RuntimeDiagnostics.RecordFallback(exception, preview); }
                 catch { /* Keep the original scheduling path available. */ }
                 try
                 {
-                    if (Interlocked.Exchange(ref _fallbackLogged, 1) == 0)
+                    ref int reported = ref (preview ? ref _previewFallbackLogged : ref _fallbackLogged);
+                    if (Interlocked.Exchange(ref reported, 1) == 0)
                     {
                         Mod.Log.Error(
-                            $"Could not construct the optimized job; retaining the game's original job: {exception}");
+                            $"Could not schedule the optimized {(preview ? "preview" : "simulation")} job; retaining the game's original job: {exception}");
                     }
                 }
                 catch { /* Logging cannot suppress the fallback. */ }

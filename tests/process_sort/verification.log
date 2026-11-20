@@ -1,0 +1,10 @@
+ClearCoverageJob m_CoverageIndex@0 m_ServiceCoverageType@8
+PrepareCoverageJob m_Service@0 m_BuildingChunks@8 m_CoverageServiceType@24 m_EntityType@28 m_CoverageElementType@32 m_BuildingData@64 m_Elements@72
+ProcessCoverageJob m_CoverageIndex@0 m_BuildingData@8 m_Elements@16 m_OwnerData@24 m_CurveData@64 m_DensityData@104 m_DestroyedData@144 m_TempData@184 m_BuildingComponentData@224 m_ModifiedServiceCoverageData@264 m_BorderDistrictData@304 m_PrefabRefData@344 m_PrefabCoverageData@384 m_CoverageElements@424 m_ServiceDistricts@464 m_Efficiencies@504 m_CoverageData@544
+CoverageElement m_CoveragePtr@0 m_Coverage@8 m_AverageCoverage@16 m_DensityFactor@20 m_LengthFactor@24
+Game.dll sha256=721e7e17bf74299aa2b988c1bd07e90874bb8bc72d263229500c4bf639e7e4ee
+Unity.Collections.dll sha256=146bfbd089ff31652efc34a586d1d5f405e22655f7da7c1b3c168093fffd2f04
+Burst native pass b7a9e5630064420d3b03d7dda10e756a sha256=3a3d4b5253ee28a28c7cb43e963ea37581a3e335e9a44134d2084f7a62313991
+17 equal priorities, input IDs 1..17; vanilla IDs 1,15,14,13,12,11,10,16,9,7,6,5,4,3,2,8,17
+161 exact edge cases passed
+200 mixed-sign finite / single-tie / infinity differential trials passed

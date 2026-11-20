@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -18,16 +19,22 @@ namespace ServiceCoverageFix
             .GetLogger("ServiceCoverageFix")
             .SetShowsErrorsInUI(true);
 
+        private static Mod? _owner;
         private Harmony? _harmony;
         private DiagnosticSettings? _settings;
         private DiagnosticLocale? _diagnosticLocale;
+        private Game.SceneFlow.GameManager? _loadEvents;
+        internal bool IsOwner => ReferenceEquals(Volatile.Read(ref _owner), this);
 
         // Callable by diagnostic tools without parsing logs. Counters refer only
-        // to live simulation jobs, not the isolated startup probes.
+        // to live simulation and preview jobs. The isolated startup probes are excluded.
         public static CoverageRuntimeStatus GetRuntimeStatus() => RuntimeDiagnostics.Snapshot();
 
         public void OnLoad(UpdateSystem updateSystem)
         {
+            // A second instance must never remove the first instance's patch or
+            // free diagnostics still in use, including during retryable teardown.
+            if (Interlocked.CompareExchange(ref _owner, this, null) != null) return;
             try
             {
                 CompatibilityGate.Validate();
@@ -35,7 +42,8 @@ namespace ServiceCoverageFix
                 RuntimeDiagnostics.Initialize();
 
                 _harmony = new Harmony(HarmonyId);
-                _harmony.PatchAll(Assembly.GetExecutingAssembly());
+                ServiceCoverageSystemPatch.Reset();
+                _harmony.CreateClassProcessor(typeof(ServiceCoverageSystemPatch)).Patch();
 
                 if (ServiceCoverageSystemPatch.ReplacementCount != 1)
                 {
@@ -44,53 +52,89 @@ namespace ServiceCoverageFix
                 }
 
                 RuntimeDiagnostics.MarkInstalled();
-                // The UI is optional: a presentation failure cannot unpatch the fix.
-                try
-                {
-                    _settings = new DiagnosticSettings(this);
-                    _diagnosticLocale = new DiagnosticLocale(_settings);
-                    Game.SceneFlow.GameManager.instance.localizationManager.AddSource("en-US", _diagnosticLocale);
-                    _settings.RegisterInOptionsUI();
-                }
-                catch (Exception uiError) { Log.Info($"Diagnostics panel unavailable: {uiError.Message}"); }
-
-                System.Version? harmonyVersion = typeof(Harmony).Assembly.GetName().Version;
-                System.Version? modVersion = Assembly.GetExecutingAssembly().GetName().Version;
-                if (CompatibilityGate.IsUnverifiedGameBuild)
-                {
-                    // A new game hash is diagnostic information, not a load failure.
-                    // Structural validation and the schedule replacement have succeeded.
-                    Log.Info(
-                        "Game build differs from the verified baseline; structural " +
-                        "and scheduling checks passed. " +
-                        $"Game.dll SHA-256: {CompatibilityGate.ActualGameSha256}");
-                }
-
-                Log.Info(
-                    $"Installed ServiceCoverageFix {modVersion}; bridge preflight passed; awaiting live coverage execution " +
-                    $"with packaged Harmony {harmonyVersion}.");
+                TryInstallPreview(_harmony, CompatibilityGate.PreviewSupported);
             }
             catch (Exception exception)
             {
-                try
-                {
-                    _harmony?.UnpatchAll(HarmonyId);
-                }
-                catch
-                {
-                    // Preserve the original failure in the log below.
-                }
-
-                _harmony = null;
-                try { RuntimeDiagnostics.Dispose(); }
-                catch (Exception cleanup) { Log.Error($"Diagnostic cleanup could not complete: {cleanup}"); }
-                Log.Error($"The stutter fix was disabled without changing simulation behavior: {exception}");
+                AbortLoad(exception);
+                return;
             }
+
+            try { TrackGameLoads(Game.SceneFlow.GameManager.instance); }
+            catch (Exception error) { try { Log.Info($"Workload history follows mod lifetime: {error.Message}"); } catch { } }
+
+            try
+            {
+                _settings = new DiagnosticSettings(this);
+                _diagnosticLocale = new DiagnosticLocale(_settings);
+                Game.SceneFlow.GameManager.instance.localizationManager.AddSource("en-US", _diagnosticLocale);
+                _settings.RegisterInOptionsUI();
+            }
+            catch (Exception uiError)
+            {
+                try { Log.Info($"Diagnostics panel unavailable: {uiError.Message}"); } catch { }
+            }
+
+            try
+            {
+                System.Version? version = Assembly.GetExecutingAssembly().GetName().Version;
+                Log.Info($"Installed ServiceCoverageFix {version}. Coverage contract and bridge preflight passed.");
+            }
+            catch { /* Logging cannot change an installed patch. */ }
+        }
+
+        internal void TrackGameLoads(Game.SceneFlow.GameManager source)
+        {
+            _loadEvents = source;
+            source.onGameLoadingComplete += OnGameLoadingComplete;
+        }
+
+        private void OnGameLoadingComplete(Colossal.Serialization.Entities.Purpose purpose, GameMode mode) =>
+            RuntimeDiagnostics.StartLoadedSession(this);
+
+        internal static void TryInstallPreview(Harmony harmony, bool supported)
+        {
+            ServiceCoveragePreviewPatch.Reset();
+            if (!supported) return;
+            // A preview transpiler or Harmony failure leaves simulation active.
+            try
+            {
+                harmony.CreateClassProcessor(typeof(ServiceCoveragePreviewPatch)).Patch();
+                if (ServiceCoveragePreviewPatch.ReplacementCount != 1)
+                    throw new InvalidOperationException("Expected one preview ApplyCoverageJob schedule replacement.");
+                RuntimeDiagnostics.MarkPreviewInstalled();
+            }
+            catch (Exception error)
+            {
+                try { Log.Info($"Coverage preview remains on vanilla: {error.Message}"); } catch { }
+            }
+        }
+
+        private void AbortLoad(Exception exception)
+        {
+            // Preserve all handles until their own cleanup succeeds. A surviving
+            // Harmony patch routes new submissions to vanilla after disposal.
+            try { OnDispose(); }
+            catch (Exception cleanup) { try { Log.Error(cleanup); } catch { } }
+            try
+            {
+                if (exception is CoverageContractMismatch)
+                    Log.Info($"ServiceCoverageFix inactive. {exception.Message}");
+                else
+                    Log.Error($"ServiceCoverageFix could not initialize. {exception}");
+            }
+            catch { /* Reporting cannot interrupt cleanup. */ }
         }
 
         public void OnDispose()
         {
+            if (!IsOwner) return;
             List<Exception>? failures = null;
+            AttemptCleanup(() =>
+            {
+                if (_loadEvents != null) _loadEvents.onGameLoadingComplete -= OnGameLoadingComplete;
+                _loadEvents = null;
+            }, ref failures);
             AttemptCleanup(() =>
             {
                 _settings?.UnregisterInOptionsUI();
@@ -115,6 +159,7 @@ namespace ServiceCoverageFix
 
             if (failures != null)
                 throw new AggregateException("ServiceCoverageFix cleanup did not fully complete.", failures);
+            Interlocked.CompareExchange(ref _owner, null, this);
         }
 
         private static void AttemptCleanup(Action cleanup, ref List<Exception>? failures)
@@ -135,6 +180,9 @@ namespace ServiceCoverageFix
         internal const string ExpectedGameSha256 =
             "721e7e17bf74299aa2b988c1bd07e90874bb8bc72d263229500c4bf639e7e4ee";
 
+        private const string SecondReviewedGameSha256 =
+            "f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745";
+
         internal const string ServiceCoverageSystemName =
             "Game.Simulation.ServiceCoverageSystem";
 
@@ -144,17 +192,19 @@ namespace ServiceCoverageFix
         internal static Type ServiceCoverageSystemType { get; private set; } = null!;
 
         internal static Type ApplyCoverageJobType { get; private set; } = null!;
-
-        internal static bool IsUnverifiedGameBuild { get; private set; }
+        internal static bool PreviewSupported { get; private set; }
+        internal static Type? CoveragePreviewSystemType { get; private set; }
 
         internal static string ActualGameSha256 { get; private set; } = string.Empty;
+        internal static bool IsUnverifiedGameBuild => ActualGameSha256 != ExpectedGameSha256 &&
+            ActualGameSha256 != SecondReviewedGameSha256;
 
         internal static void Validate()
         {
             Type? systemType = AccessTools.TypeByName(ServiceCoverageSystemName);
             if (systemType == null)
             {
-                throw new TypeLoadException(ServiceCoverageSystemName);
+                throw new CoverageContractMismatch(ServiceCoverageSystemName + " is missing.");
             }
 
             string assemblyPath = systemType.Assembly.Location;
@@ -163,35 +213,37 @@ namespace ServiceCoverageFix
                 throw new FileNotFoundException("Could not locate the loaded Game.dll.", assemblyPath);
             }
 
-            string actualHash;
+            // Both released fixtures have the same reviewed simulation and preview
+            // contracts. Stream their hash first to avoid the much larger metadata
+            // allocation on these builds. Other hashes still use the behavior gate.
             using (FileStream stream = File.OpenRead(assemblyPath))
             using (SHA256 sha256 = SHA256.Create())
-            {
-                actualHash = ToLowerHex(sha256.ComputeHash(stream));
-            }
+                ActualGameSha256 = ToLowerHex(sha256.ComputeHash(stream));
 
-            ActualGameSha256 = actualHash;
-            IsUnverifiedGameBuild = !string.Equals(
-                actualHash,
-                ExpectedGameSha256,
-                StringComparison.Ordinal);
+            bool compatiblePreview = !IsUnverifiedGameBuild || CoverageContract.Validate(assemblyPath);
+            CoveragePreviewSystemType = systemType.Assembly.GetType("Game.Tools.CoveragePreviewSystem");
+            PreviewSupported = compatiblePreview && CoveragePreviewSystemType != null;
 
             Type? jobType = systemType.GetNestedType(
                 "ApplyCoverageJob",
                 BindingFlags.Public | BindingFlags.NonPublic);
             if (jobType == null || jobType.FullName != ApplyCoverageJobName)
             {
-                throw new TypeLoadException(ApplyCoverageJobName);
+                throw new CoverageContractMismatch(ApplyCoverageJobName);
             }
 
             ValidateNativeListField(jobType, "m_BuildingData", "BuildingData", 24);
             ValidateNativeListField(jobType, "m_Elements", "CoverageElement", 32);
+            if (jobType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Length != 2)
+                throw new CoverageContractMismatch("Unexpected fields in the game's ApplyCoverageJob.");
             if (!typeof(Unity.Jobs.IJob).IsAssignableFrom(jobType) || !jobType.IsValueType)
-                throw new InvalidOperationException("ApplyCoverageJob must remain an IJob value type.");
+                throw new CoverageContractMismatch("ApplyCoverageJob must remain an IJob value type.");
             Type coverageType = AccessTools.TypeByName("Game.Net.ServiceCoverage")
-                ?? throw new TypeLoadException("Game.Net.ServiceCoverage");
+                ?? throw new CoverageContractMismatch("Game.Net.ServiceCoverage");
             ValidateLayout(coverageType, new[] { "m_Coverage" },
                 new[] { "Unity.Mathematics.float2" }, new[] { 0 });
+            if (Marshal.SizeOf(coverageType) != 8)
+                throw new CoverageContractMismatch("Unexpected size for ServiceCoverage.");
             ApplyCoverageJobType = jobType;
             ServiceCoverageSystemType = systemType;
         }
@@ -206,13 +258,13 @@ namespace ServiceCoverageFix
             if (field == null || !field.FieldType.IsGenericType ||
                 field.FieldType.GetGenericTypeDefinition().FullName != "Unity.Collections.NativeList`1")
             {
-                throw new MissingFieldException(jobType.FullName, fieldName);
+                throw new CoverageContractMismatch("Unexpected field " + jobType.FullName + "." + fieldName);
             }
 
             Type elementType = field.FieldType.GetGenericArguments()[0];
             if (elementType.Name != expectedElementName)
             {
-                throw new InvalidOperationException(
+                throw new CoverageContractMismatch(
                     $"{fieldName} has unexpected element type {elementType.FullName}.");
             }
 
@@ -230,7 +282,7 @@ namespace ServiceCoverageFix
             int actualSize = System.Runtime.InteropServices.Marshal.SizeOf(elementType);
             if (actualSize != expectedElementSize)
             {
-                throw new InvalidOperationException(
+                throw new CoverageContractMismatch(
                     $"{elementType.FullName} is {actualSize} bytes; expected {expectedElementSize}.");
             }
         }
@@ -240,13 +292,13 @@ namespace ServiceCoverageFix
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             if (!type.IsValueType || (!type.IsLayoutSequential && !type.IsExplicitLayout) ||
                 type.GetFields(flags).Length != names.Length)
-                throw new InvalidOperationException($"Unexpected layout for {type.FullName}.");
+                throw new CoverageContractMismatch($"Unexpected layout for {type.FullName}.");
             for (int i = 0; i < names.Length; i++)
             {
                 FieldInfo? field = type.GetField(names[i], flags);
                 if (field == null || field.FieldType.FullName != types[i] ||
                     Marshal.OffsetOf(type, names[i]).ToInt64() != offsets[i])
-                    throw new InvalidOperationException($"Unexpected type or offset for {type.FullName}.{names[i]}.");
+                    throw new CoverageContractMismatch($"Unexpected type or offset for {type.FullName}.{names[i]}.");
             }
         }
 

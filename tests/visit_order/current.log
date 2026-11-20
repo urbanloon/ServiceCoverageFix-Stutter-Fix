@@ -1,0 +1,21 @@
+Game.dll original SHA-256 f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745
+ServiceCoverageFix.dll original SHA-256 ec0f1babf3bda04a71bb81808858112c25816111605ebb48a9628b2b5a2b48ce
+Game.Simulation.ServiceCoverageSystem/ApplyCoverageJob: consumed index at IL_0096
+Game.Simulation.ServiceCoverageSystem/ApplyCoverageJob: destination pointer and both float bit patterns at IL_0159
+ServiceCoverageFix.OptimizedApplyCoverageJob: ApplyElement entry logs element pointer
+ServiceCoverageFix.OptimizedApplyCoverageJob: destination pointer and both float bit patterns at IL_00ad
+group,cases,selected_elements,target_stores
+mode-0,192,59794,16680
+mode-1,192,59573,17004
+mode-2,192,70922,1135
+mode-3,192,59794,16680
+mode-4,192,69602,14308
+mode-5,192,55326,26339
+mode-6,192,58831,18370
+mode-7,192,60239,22673
+fully-occluded,6,7595,0
+overlapping-slices,6,7595,361
+heavy-distinct,1,510220,57461
+heavy-ties,1,510220,62441
+heavy-shared-target,1,510220,14
+PASS 1551 cases; 2039931 visits; 253466 stores. Interleaved visits, destination IDs, both float bit patterns, final bytes and guards match.

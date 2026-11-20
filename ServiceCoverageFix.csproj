@@ -4,7 +4,7 @@
     <Configurations>Debug;Release</Configurations>
     <AssemblyName>ServiceCoverageFix</AssemblyName>
     <RootNamespace>ServiceCoverageFix</RootNamespace>
-    <Version>0.3.4</Version>
+    <Version>0.3.5</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <Reference Include="Game"><Private>false</Private></Reference>
+    <Reference Include="Colossal.Mono.Cecil"><Private>false</Private></Reference>
     <Reference Include="Colossal.Core"><Private>false</Private></Reference>
     <Reference Include="Colossal.Logging"><Private>false</Private></Reference>
     <Reference Include="Colossal.IO.AssetDatabase"><Private>false</Private></Reference>

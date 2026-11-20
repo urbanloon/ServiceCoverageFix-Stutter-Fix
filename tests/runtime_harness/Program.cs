@@ -69,5 +69,35 @@ internal static class Program
         Check(AllocationTracker.Live==0,"Reload leaked native memory");
         Console.WriteLine("PASS: bridge probes (0/1/2 providers), bad fields, pending execution, managed detection, repeated fallback, single scheduling, unload completion, reload, allocation lifetime.");
         FailurePathTests.Run();
+        WorkloadTests.Run();
+        VerifyPreviewBridge();
+    }
+    private static void VerifyPreviewBridge()
+    {
+        RuntimeDiagnostics.Initialize();
+        RuntimeDiagnostics.MarkInstalled();
+        using var buildings = new NativeList<BuildingData>(1, Allocator.TempJob);
+        using var elements = new NativeList<CoverageElement>(1, Allocator.TempJob);
+        var original = new OriginalJob { m_BuildingData = buildings, m_Elements = elements };
+        try
+        {
+            int before = OriginalJob.Executions;
+            var dependency = IJobExtensions.Schedule(original, default);
+            var disabled = ApplyCoverageScheduleBridge.SchedulePreview(original, dependency, (int)Game.Net.CoverageService.Park);
+            Check(OriginalJob.Executions == before, "Inactive preview forced a scheduled dependency.");
+            disabled.Complete();
+            Check(OriginalJob.Executions == before + 2, "Inactive preview lost its dependency or vanilla job.");
+            RuntimeDiagnostics.MarkPreviewInstalled();
+            ApplyCoverageScheduleBridge.SchedulePreview(original, default, (int)Game.Net.CoverageService.Park).Complete();
+            IJobExtensions.FailNext = true;
+            ApplyCoverageScheduleBridge.SchedulePreview(original, default, (int)Game.Net.CoverageService.Park).Complete();
+            var preview = RuntimeDiagnostics.SnapshotCaller(true);
+            Check(preview.Scheduled == 1 && preview.Completed == 1 && preview.Fallbacks == 2,
+                "Preview bridge reported incorrect successful, rejected, or fallback submissions.");
+            Check(OriginalJob.Executions == before + 3 && RuntimeDiagnostics.SnapshotCaller(false).Fallbacks == 0,
+                "Preview fallback duplicated work or changed simulation status.");
+        }
+        finally { RuntimeDiagnostics.Dispose(); }
+        Console.WriteLine("PASS: preview bridge preserves vanilla dependencies while inactive, schedules one accepted replacement, and falls back exactly once on failure.");
     }
 }

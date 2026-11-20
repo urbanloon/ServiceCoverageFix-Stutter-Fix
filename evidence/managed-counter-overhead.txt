@@ -1,0 +1,4 @@
+empty pass scheduled+worker+completed, 21 x 80000 pairs, baseline 85.6 ns, workload 103.8 ns, paired median difference 17.2 ns (p25 15.9, p75 19.6)
+1x1105920 limited=False visited=1105920 | baseline 8.511 ms, workload 8.659 ms | paired median 1.94% (p25 -0.79%, p75 4.79%)
+96x11520 limited=False visited=1105920 | baseline 45.920 ms, workload 46.454 ms | paired median 0.87% (p25 -0.43%, p75 3.41%)
+320x3072 limited=True visited=89211 | baseline 2.347 ms, workload 2.361 ms | paired median 1.46% (p25 -0.29%, p75 3.79%)

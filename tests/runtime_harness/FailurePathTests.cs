@@ -46,6 +46,12 @@ internal static class FailurePathTests
             try { ReportingFailure(scenario); }
             catch(Exception error) { failures.Add(new Exception($"Reporting scenario {scenario}",error)); }
         }
+        try { PartialPoolDisposal(); }
+        catch(Exception error) { failures.Add(new Exception("Partial pool disposal",error)); }
+        try { PreflightLifetime(); }
+        catch(Exception error) { failures.Add(new Exception("Preflight lifetime",error)); }
+        try { FailedStartupCleanup(); }
+        catch(Exception error) { failures.Add(new Exception("Failed startup cleanup",error)); }
         try { VanillaFailure(); }
         catch(Exception error) { failures.Add(new Exception("Vanilla scheduling failure",error)); }
         for(int mask=0;mask<16;mask++)
@@ -54,7 +60,7 @@ internal static class FailurePathTests
             catch(Exception error) { failures.Add(new Exception($"Unload failure mask {mask}",error)); }
         }
         if(failures.Count!=0)throw new AggregateException("Failure-path regressions",failures);
-        Console.WriteLine("PASS: reporting/formatting failures preserve one vanilla job and its dependency; vanilla scheduling errors propagate; all 16 unload-failure combinations preserve errors, counter lifetime, and retryable cleanup.");
+        Console.WriteLine("PASS: synchronous preflight lifetime, partial startup rollback, duplicate load isolation, reporting/formatting failures preserve one vanilla job and its dependency; vanilla scheduling errors propagate; all 16 unload-failure combinations preserve errors, counter lifetime, and retryable cleanup.");
     }
 
     private static void ReportingFailure(int scenario)
@@ -87,6 +93,78 @@ internal static class FailurePathTests
         }
     }
 
+    private static void PartialPoolDisposal()
+    {
+        RuntimeDiagnostics.Initialize();
+        RuntimeDiagnostics.MarkInstalled();
+        using var records=new NativeList<RawBuildingData>(1,Allocator.TempJob);
+        using var elements=new NativeList<RawCoverageElement>(1,Allocator.TempJob);
+        var job=new OptimizedApplyCoverageJob{BuildingData=records,Elements=elements};
+        var earlier=RuntimeDiagnostics.Schedule(job, default, 0);
+        var later=RuntimeDiagnostics.Schedule(job, earlier, 1);
+        NativeArray<ExecutionCounters>.DisposalsBeforeFailure=1;
+        try
+        {
+            bool failed=false;
+            try { RuntimeDiagnostics.Dispose(); }
+            catch(InvalidOperationException error) when(error.Message=="Injected disposal failure") { failed=true; }
+            Check(failed && later.IsCompleted && AllocationTracker.Live==3,
+                "Partial pool disposal failed to retain exactly the unfreed counter allocation");
+            Check(!RuntimeDiagnostics.Snapshot().Installed, "A partially released pool still accepts work");
+            RuntimeDiagnostics.FormatWorkloads();
+        }
+        finally
+        {
+            NativeArray<ExecutionCounters>.DisposalsBeforeFailure=-1;
+            RuntimeDiagnostics.Dispose();
+        }
+        Check(AllocationTracker.Live==2, "Retry leaked the remaining counter allocation");
+    }
+
+    private static void PreflightLifetime()
+    {
+        int submissions=IJobExtensions.Schedules;
+        IJobExtensions.RunFailure=new InvalidOperationException("Injected synchronous probe failure");
+        bool rejected=false;
+        try { ApplyCoverageScheduleBridge.ValidateBridge(typeof(OriginalJob)); }
+        catch(InvalidOperationException) { rejected=true; }
+        finally { IJobExtensions.RunFailure=null; }
+        Check(rejected && AllocationTracker.Live==0 && IJobExtensions.Schedules==submissions,
+            "Failed probe leaked data or left an outstanding job");
+    }
+
+    private static void FailedStartupCleanup()
+    {
+        // Reproduce failure immediately after Harmony has partially installed
+        // the patch. Exercise the same rollback routine invoked by OnLoad.
+        var mod=new Mod();
+        typeof(Mod).GetField("_owner",BindingFlags.NonPublic|BindingFlags.Static)!.SetValue(null,mod);
+        var harmony=new Harmony(Mod.HarmonyId) { UnpatchFailure=new Exception("Injected rollback failure") };
+        SetField(mod,"_harmony",harmony);
+        RuntimeDiagnostics.Initialize();
+        LogManager.Logger.ErrorFailure=new Exception("Injected reporting failure");
+        try
+        {
+            typeof(Mod).GetMethod("AbortLoad",BindingFlags.NonPublic|BindingFlags.Instance)!
+                .Invoke(mod,new object[]{new UnprintableException()});
+            Check(!RuntimeDiagnostics.Snapshot().Installed&&AllocationTracker.Live==0,
+                "Failed startup kept scheduling enabled or leaked completed counter storage");
+            var duplicate=new Mod();
+            duplicate.OnLoad(new Game.UpdateSystem());
+            duplicate.OnDispose();
+            Check(harmony.Patched&&harmony.UnpatchCalls==1,
+                "A rejected duplicate changed the original patch");
+        }
+        finally
+        {
+            LogManager.Logger.ErrorFailure=null;
+            harmony.UnpatchFailure=null;
+            mod.OnDispose();
+        }
+        Check(!harmony.Patched&&harmony.UnpatchCalls==2,
+            "Failed startup lost the Harmony handle needed to retry unpatching");
+    }
+
     private static void VanillaFailure()
     {
         ApplyCoverageScheduleBridge.ValidateBridge(typeof(OriginalJob));
@@ -111,6 +189,7 @@ internal static class FailurePathTests
     {
         RuntimeDiagnostics.Initialize();RuntimeDiagnostics.MarkInstalled();
         var mod=new Mod();
+        typeof(Mod).GetField("_owner",BindingFlags.NonPublic|BindingFlags.Static)!.SetValue(null,mod);
         var settings=new DiagnosticSettings(mod);
         var locale=new DiagnosticLocale(settings);
         var harmony=new Harmony(Mod.HarmonyId);
@@ -128,6 +207,11 @@ internal static class FailurePathTests
         if((mask&8)!=0){pending.Work!.CompletionFailure=new InvalidOperationException("Injected completion failure");expected.Add(pending.Work.CompletionFailure);}
         try
         {
+            var duplicate=new Mod();
+            duplicate.OnLoad(new Game.UpdateSystem());
+            duplicate.OnDispose();
+            Check(RuntimeDiagnostics.Snapshot().Installed&&!pending.IsCompleted,
+                "A duplicate load or unload affected the active owner");
             Exception? actual=null;
             try { mod.OnDispose(); } catch(Exception error) { actual=error; }
             if(expected.Count==0)Check(actual==null,"Clean unload threw");

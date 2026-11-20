@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks><Nullable>enable</Nullable>
+    <CompareSource Condition="'$(CompareSource)' == ''">../game_compare</CompareSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(CompareSource)/Inputs.cs" Link="Inputs.cs" />
+    <Compile Include="$(CompareSource)/Jobs.cs" Link="Jobs.cs" />
+    <Reference Include="Colossal.Mono.Cecil"><HintPath>$(GameManagedPath)/Colossal.Mono.Cecil.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

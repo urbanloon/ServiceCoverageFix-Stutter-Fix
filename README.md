@@ -22,7 +22,7 @@ calculations.
 | This README | End-to-end problem model, investigation path, algorithm, invariants, patch boundary, and evidence limits |
 | [`ANALYSIS.md`](ANALYSIS.md) | Native addresses, ETW stack reconstruction, disassembly attribution, development experiments, and confidence classification |
 | [`BENCHMARKS.md`](BENCHMARKS.md) | Native selector-only benchmark methodology, results, and rejected candidates |
-| [`src/OptimizedApplyCoverageJob.cs`](src/OptimizedApplyCoverageJob.cs) | Published 0.3.2 record-local byte-radix implementation |
+| [`src/OptimizedApplyCoverageJob.cs`](src/OptimizedApplyCoverageJob.cs) | Current coverage merge and workload counts |
 | [`src/ServiceCoverageSystemPatch.cs`](src/ServiceCoverageSystemPatch.cs) | Harmony schedule-call replacement and managed fallback bridge |
 | [`src/Mod.cs`](src/Mod.cs) | Load, unload, build diagnostics, and structural compatibility gate |
 | [`tests/reference_model.py`](tests/reference_model.py) | Executable reference models, ordering properties, layout proof, and stress tests |
@@ -31,54 +31,35 @@ calculations.
 The repository contains the source, analysis record, benchmark results, and
 reference-model tests. It does not include the supplied `.cok` test saves,
 Colossal Order's `Game.dll`, the game's generated Burst binary, the original ETL
-captures, raw frame-time captures, native benchmark raw timings, or the native
-development benchmark harness. Measurements derived from those artifacts are
-reported here and in the analysis documents, but the underlying artifacts are
-not archived in this repository.
+captures or raw frame-time recordings. The 0.3.5 worker harness, per-trial
+timings and anonymized trace summaries are included with this candidate.
 
-## Candidate: 0.3.4
+## Candidate 0.3.5
 
-This branch adds execution verification. It has not been published to Paradox Mods.
+Both the normal service rotation and the tool/infoview preview schedule the game's
+`ApplyCoverageJob`. Version 0.3.4 intercepted only the simulation call. The
+candidate checks each scheduling site separately, captures the service from the
+actual Prepare job, and runs the replacement with the original Apply dependency.
+The game retains ownership of its buffers and decides when each service updates.
 
-- Startup checks the exact field types and offsets of the provider, coverage
-  element, and target coverage structs, then exercises the real field-access
-  bridge with isolated zero-, one-, and two-provider jobs. The probes must
-  complete and produce the expected coverage before the patch is installed.
-- The replacement worker records starts, completions, and managed execution in
-  a separate native counter allocation. `BurstDiscard` distinguishes managed
-  execution from Burst execution. Probes do not contribute to live counters.
-- Scheduling fallbacks are counted and the latest exception description retained
-  when formatting succeeds. Diagnostic or logging failures cannot prevent the
-  original game job from being scheduled; errors from that scheduler still propagate.
-  Successful startup is described as installation, not proof of live execution.
-- **Options → Service Coverage Stutter Fix → Diagnostics** exposes the state,
-  counters, and last fallback error. Reopen the panel to refresh. Diagnostic tools
-  can also call `ServiceCoverageFix.Mod.GetRuntimeStatus()` without reading logs.
-- Counter writes occur once per job entry/exit, never per element. Counter memory
-  is released only after tracked jobs complete. Normal scheduling only reclaims
-  already-finished handles; it does not block on outstanding coverage work.
-- Unload attempts every cleanup stage even if UI removal or unpatching fails.
-  Failed resource handles remain available for a retry, and all cleanup errors
-  are preserved. Failed job completion retains counter memory until a later
-  cleanup can safely release it.
+**Options → Service Coverage Stutter Fix → Diagnostics** shows separate simulation
+and preview counters. For each service, **providers** counts eligible providers
+with work and a live budget. **Available** sums their usable element ranges,
+**processed** counts visits including already-covered targets, and **reserved**
+is the total prepared input list length before filtering. Workload rows reset on
+a completed city load. A completed empty pass shows zero. The panel can distinguish it from a pass that has never completed.
 
-The state reports observations since load: a managed execution or fallback
-remains visible even if later jobs succeed. Counts include empty coverage jobs.
-A completion confirms execution, not acceptable frame time. Live counter reads
-are atomic individually, not a synchronized snapshot of all workers.
+The worker handles NaN and unordered priority streams. It uses the game's own
+initial sort and follows its concrete reinsertion order when priorities do not
+form a total order. Known game assemblies are recognized by SHA-256. On a new
+build, the mod checks the relevant managed code and field layouts before installing
+the replacement. A preview compatibility failure can leave simulation active.
 
-Coverage arithmetic, provider selection, tie order, and game dependencies are
-unchanged. Prepare, Clear, and Process coverage stages remain vanilla. This is
-an execution-verification candidate, not a confirmed fix for the reported stalls.
-Unity/Burst compilation, Options-panel rendering, and execution in a real city
-still require in-game verification.
-
-## Latest release: 0.3.3
-
-Removes the compatibility error popup when a different game build passes all
-structural and scheduling checks. The build hash is logged at information level.
-Actual loading failures still report errors. Coverage logic is unchanged from
-0.3.2.
+Read [the candidate measurements](PERFORMANCE.md) and [the archived trace
+analysis](evidence/trace-profile/TRACE_PROFILE.md) for worker timings, comparisons
+against vanilla and the costs of the other pipeline stages. The descriptions below
+of the original four-level selector, the initial patch, and previous benchmarks
+are the historical development record.
 
 ## Public version history
 
@@ -95,7 +76,7 @@ The public source progression is **0.1.8 → 0.3.2 → 0.3.3**.
 - **0.3.2** replaced the 33-bucket selector
   with a four-level byte-radix selector, removed the diagnostic controls, and
   introduced a record-local temporary-memory layout.
-- **0.3.3** is the current published build. It removes the compatibility error
+- **0.3.3** removed the compatibility error
   popup by logging game-build differences at information level. Structural
   checks, genuine error reporting, and the 0.3.2 coverage implementation remain
   unchanged.
@@ -156,14 +137,11 @@ Positive and negative zero both map to `0x7FFFFFFF`, preserving their equality.
 Positive and negative infinity remain ordered. No float arithmetic is performed
 by this transform; it operates only on the original bits.
 
-An `AverageCoverage` NaN is a deliberately stated domain exclusion. Vanilla's comparer is itself
-non-antisymmetric for NaN because both `Compare(NaN, x)` and `Compare(x, NaN)`
-can return `-1`. There is no reproducible total integer order that can promise
-the same undefined `NativeSort` permutation for hostile NaN prefab data without
-adding a full validation and fallback pass. The float-to-key ordering guarantee
-therefore excludes only NaN `AverageCoverage`; it covers every non-NaN binary32
-value, including signed zero and both infinities. Valid base-game coverage
-magnitudes are expected to be finite.
+Versions through 0.3.4 excluded NaN priorities from their equivalence claim.
+The candidate preserves the initial order returned by the game's actual sort.
+When a NaN head makes the order ambiguous, the candidate follows vanilla's
+adjacent reinsertion rule. These inputs are covered by the direct game and Burst
+comparison suites.
 
 ### Equivalence domain
 
@@ -512,7 +490,7 @@ Unlike the unpublished 0.2.0 stack-node experiment, the published record-local
 layout has no 8,192-provider cap. It has been stress-modeled through 65,537
 providers.
 
-## Patch boundary and runtime data flow
+## Patch boundary and runtime data flow through 0.3.4
 
 The mod replaces a scheduling call rather than patching arbitrary native code:
 
@@ -649,81 +627,17 @@ the city, service-coverage workload, hardware, and other active mods. Cities
 without unusually large service-coverage workloads may receive only a small
 improvement.
 
-## Compatibility and failure behavior
+## Build
 
-Version 0.3.2 was verified against `Game.dll` SHA-256:
+Extract the project and open **ServiceCoverageFix.sln** in Visual Studio with
+the official Cities: Skylines II mod toolchain configured. Select **Release**
+and **Build → Rebuild Solution**. The project resolves game references through the
+official template and restores its private Harmony 2.2.2 dependency via NuGet.
 
-`721e7e17bf74299aa2b988c1bd07e90874bb8bc72d263229500c4bf639e7e4ee`
-
-The 0.3.4 candidate startup path verifies that:
-
-- `Game.Simulation.ServiceCoverageSystem` exists;
-- its nested `ApplyCoverageJob` exists with the expected full name;
-- `m_BuildingData` and `m_Elements` are `NativeList<T>` fields;
-- their element type names remain `BuildingData` and `CoverageElement`;
-- their element types remain 24 and 32 bytes respectively;
-- internal field types and offsets match the replacement, including the target coverage field;
-- isolated bridge probes execute and produce expected coverage;
-- exactly one matching `Schedule<ApplyCoverageJob>` call is replaced.
-
-These are defensive structural checks, not proof that an unknown future build
-is semantically compatible. The 0.3.3 gate checked names and sizes; the 0.3.4 candidate additionally checks
-internal element field types and offsets and runs isolated execution probes. In 0.3.3, a different game hash is recorded at information level after the
-listed checks pass, without a compatibility popup. This does not certify an
-unknown build's behavior. If a listed
-check fails, the mod fails closed during loading and removes its patch.
-
-If the managed bridge cannot construct the typed views for one update, it logs
-once and schedules the original game job for that update. Removing the mod
-restores the original implementation because the mod adds no save data.
-
-Lib.Harmony 2.2.2 is declared with `PrivateAssets="all"`, making it a
-non-transitive NuGet dependency, and the build copies `0Harmony.dll` beside the
-mod. Its notice is retained in
-[`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt).
-
-## Build and test
-
-1. Open `ServiceCoverageFix.sln` in the Visual Studio installation where the
-   official Cities: Skylines II mod template builds.
-2. Select **Release** and choose **Build > Rebuild Solution**.
-3. Confirm `1 succeeded, 0 failed` and that the load message begins with:
-
-   `Installed ServiceCoverageFix 0.3.4.0; bridge preflight passed; awaiting live coverage execution`
-
-4. Run:
-
-   ```text
-   python tests/reference_model.py
-   ```
-
-5. With .NET 8 installed, run the bridge/lifecycle harness:
-
-   ```text
-   dotnet run --project tests/runtime_harness/RuntimeHarness.csproj -p:GameManagedPath="PATH/TO/Cities2_Data/Managed"
-   ```
-
-   This executes production bridge, job, diagnostic, and mod-disposal code against test-only
-   collection/scheduler adapters and the game's mathematics library. It covers
-   failed field validation, deferred execution, managed detection, repeated
-   fallback, single scheduling, unload, reload, and native allocation lifetime.
-   Fault injection checks logger and exception-formatting failures, propagation
-   of vanilla scheduling failures, and all 16 combinations of settings removal,
-   locale removal, unpatching, and job-completion failure. It also verifies cleanup
-   retries and vanilla fallback when failed unpatching leaves a patch installed.
-   It does not validate Harmony installation, Burst output, or Unity scheduling.
-   Test adapters are excluded from the mod project.
-
-6. Build through the official CS2 template, load a city, and inspect Diagnostics.
-   Check starts and completions increase, managed/fallback counts remain zero,
-   and unload/reload works. Test the panel and a deliberately induced fallback
-   in a development build. Repeat the affected scene's capture to determine
-   whether remaining stalls persist before publishing.
-
-For performance changes, repeat the same-scene capture and resolve samples to
-the exact replacement binary before changing another hot path. The next change
-should be justified by a new trace, not by the presence of an optimization that
-is theoretically possible.
+Offline validation instructions, target game builds and results are in
+[PERFORMANCE.md](PERFORMANCE.md). The native verifier uses the supplied Unity
+Burst compiler to build an isolated worker. The Visual Studio project uses the
+official mod build and publish profiles.
 
 ## License
 

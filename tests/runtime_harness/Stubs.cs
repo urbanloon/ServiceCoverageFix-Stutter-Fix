@@ -21,11 +21,17 @@ namespace Unity.Collections {
  [AttributeUsage(AttributeTargets.Field)] public sealed class ReadOnlyAttribute : Attribute {}
  public unsafe struct NativeArray<T> : IDisposable where T: unmanaged {
   private T* ptr;
+  public static int DisposalsBeforeFailure = -1;
   public NativeArray(int length, Allocator allocator) {ptr=(T*)NativeMemory.AllocZeroed((nuint)(Math.Max(1,length)*sizeof(T))); AllocationTracker.Live++;}
   public bool IsCreated => ptr!=null;
   public T this[int i] {get=>ptr[i];set=>ptr[i]=value;}
   public void* Ptr => ptr;
-  public void Dispose(){if(ptr!=null){NativeMemory.Free(ptr);ptr=null;AllocationTracker.Live--;}}
+  public void Dispose(){
+   if(ptr==null)return;
+   if(DisposalsBeforeFailure==0){DisposalsBeforeFailure=-1;throw new InvalidOperationException("Injected disposal failure");}
+   if(DisposalsBeforeFailure>0)DisposalsBeforeFailure--;
+   NativeMemory.Free(ptr);ptr=null;AllocationTracker.Live--;
+  }
  }
  public static class AllocationTracker {public static int Live;}
  public unsafe struct NativeList<T> : IDisposable where T: unmanaged {
@@ -49,7 +55,7 @@ namespace Unity.Collections.LowLevel.Unsafe {
   public static void* AddressOf<T>(ref T value) where T:unmanaged=>System.Runtime.CompilerServices.Unsafe.AsPointer(ref value);
   public static void MemCpy(void* dst,void* src,long size)=>Buffer.MemoryCopy(src,dst,size,size);
  }
- public static unsafe class NativeArrayUnsafeUtility {public static void* GetUnsafePtr<T>(Unity.Collections.NativeArray<T> a) where T:unmanaged=>a.Ptr;}
+ public static unsafe class NativeArrayUnsafeUtility {public static void* GetUnsafePtr<T>(Unity.Collections.NativeArray<T> a) where T:unmanaged=>a.IsCreated?a.Ptr:throw new ObjectDisposedException("NativeArray");}
  public static unsafe class NativeListUnsafeUtility {
   public static void* GetUnsafePtr<T>(Unity.Collections.NativeList<T> a) where T:unmanaged=>a.Ptr;
   public static void* GetUnsafeReadOnlyPtr<T>(Unity.Collections.NativeList<T> a) where T:unmanaged=>a.Ptr;
@@ -64,6 +70,8 @@ namespace Unity.Jobs {
   public void Complete(){if(Work!=null&&!Work.Done){if(Work.CompletionFailure!=null){var error=Work.CompletionFailure;Work.CompletionFailure=null;throw error;}Work.Action();Work.Done=true;}}
  }
  public static class IJobExtensions {
+  public static Exception? RunFailure;
+  public static void Run<T>(T job) where T:struct,IJob {if(RunFailure!=null)throw RunFailure;job.Execute();}
   public static bool FailNext;
   public static int Schedules;
   public static readonly Queue<Exception> ScheduleFailures=new();
@@ -80,11 +88,19 @@ namespace HarmonyLib {
   public static MethodInfo? Method(Type t,string name)=>t.GetMethod(name,BindingFlags.Static|BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic);
   public static Type? TypeByName(string name)=>Type.GetType(name);
  }
- public sealed class CodeInstruction {public OpCode opcode;public object? operand;}
+ public sealed class CodeInstruction {
+  public OpCode opcode;public object? operand;public readonly List<Label> labels=new();public readonly List<object> blocks=new();
+  public CodeInstruction(OpCode opcode,object? operand=null){this.opcode=opcode;this.operand=operand;}
+ }
  public sealed class Harmony {
   public Exception? UnpatchFailure; public int UnpatchCalls; public bool Patched=true;
   public Harmony(string id){}
   public void PatchAll(Assembly assembly){}
+  public Action<Type>? PatchClassAction;
+  public sealed class TestPatchClassProcessor {
+   internal Action? Action; public void Patch()=>Action?.Invoke();
+  }
+  public TestPatchClassProcessor CreateClassProcessor(Type type)=>new(){Action=()=>PatchClassAction?.Invoke(type)};
   public void UnpatchAll(string id){UnpatchCalls++;if(UnpatchFailure!=null)throw UnpatchFailure;Patched=false;}
  }
 }
@@ -102,7 +118,9 @@ namespace Colossal {
  public interface IDictionaryEntryError{}
  public interface IDictionarySource {IEnumerable<KeyValuePair<string,string>> ReadEntries(IList<IDictionaryEntryError> errors,Dictionary<string,int> counts);void Unload();}
 }
-namespace Game {public sealed class UpdateSystem{}}
+namespace Colossal.Serialization.Entities {public enum Purpose {LoadGame}}
+namespace Game {public enum GameMode {Game} public sealed class UpdateSystem{}}
+namespace Game.Net {public enum CoverageService:byte {Healthcare,FireRescue,Police,Park,PostService,Education,EmergencyShelter,Welfare,Count}}
 namespace Game.Modding {public interface IMod {void OnLoad(Game.UpdateSystem system);void OnDispose();}}
 namespace Game.Settings {
  [AttributeUsage(AttributeTargets.Property)] public sealed class SettingsUISectionAttribute:Attribute {public SettingsUISectionAttribute(string section){}}
@@ -122,6 +140,10 @@ namespace Game.Settings {
 namespace Game.SceneFlow {
  public sealed class GameManager {
   public static readonly GameManager instance=new();
+  public delegate void EventGamePreload(Colossal.Serialization.Entities.Purpose purpose, Game.GameMode mode);
+  public event EventGamePreload? onGameLoadingComplete;
+  public void CompleteLoad()=>onGameLoadingComplete?.Invoke(default,Game.GameMode.Game);
+  public int LoadSubscribers=>onGameLoadingComplete?.GetInvocationList().Length??0;
   public readonly TestLocalizationManager localizationManager=new();
  }
  public sealed class TestLocalizationManager {
