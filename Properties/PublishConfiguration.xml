@@ -78,8 +78,18 @@ P.S. If you're curious about the computer-science idea behind why changing an al
 	<ModVersion Value="0.4.2" />
 	<GameVersion Value="*" />
 
-	<ChangeLog>- Restored vanilla housing and resource-seller searches after reports of simulation errors. The fix applies even if you previously enabled both options.
-- Simplified Diagnostics to show coverage status and the latest workload for each service.</ChangeLog>
+	<ChangeLog>0.4.2
+- Fixed an issue with the housing and resource-seller beta options. Both searches now use vanilla.
+- Removed the beta status panel and simplified Diagnostics to show coverage status and workload by service.
+
+0.4.1
+- Added optional company property search for commercial and industrial businesses.
+- Clarified the housing search tooltip and added a Big City Performance compatibility notice.
+
+0.4.0
+- Added four optional optimizations for water flow, route search, housing search, and resource-seller search. All four were off by default.
+- Added a beta status display and updated the mod thumbnail.
+- Included faster service-coverage updates and tool previews, plus per-service provider and coverage element counts.</ChangeLog>
 
 	<!-- Supported values: Public, Private, Unlisted -->
 	<AccessLevel Value="Public" />
