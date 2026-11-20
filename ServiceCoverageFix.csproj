@@ -4,7 +4,7 @@
     <Configurations>Debug;Release</Configurations>
     <AssemblyName>ServiceCoverageFix</AssemblyName>
     <RootNamespace>ServiceCoverageFix</RootNamespace>
-    <Version>0.3.3</Version>
+    <Version>0.3.4</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -14,6 +14,10 @@
     <!-- Required by the official Cities: Skylines II mod template. -->
     <PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
 
   <!-- Imports must remain after the first PropertyGroup. -->
   <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
@@ -59,3 +63,4 @@
   </Target>
 
 </Project>
+

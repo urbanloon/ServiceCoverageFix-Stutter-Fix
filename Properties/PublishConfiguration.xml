@@ -65,11 +65,11 @@ P.S. If you're curious about the computer-science idea behind why changing an al
 	<Tag Value="Code Mod" />
 
 	<!-- Version -->
-	<ModVersion Value="0.3.3" />
+	<ModVersion Value="0.3.4" />
 	<GameVersion Value="*" />
 
-	<!-- Changes from version 0.3.2 -->
-	<ChangeLog Value="Removes the compatibility error popup on structurally compatible game updates. Build differences are logged as information. Retains structural validation, patch checks, genuine error reporting, and the existing coverage optimization." />
+	<!-- Candidate changes from version 0.3.3 -->
+	<ChangeLog Value="Validates the coverage bridge before installing the patch and checks exact coverage field layouts. Tracks live replacement execution, managed versus Burst execution, and vanilla fallbacks. Coverage calculations are unchanged." />
 
 	<!-- Supported values: Public, Private, Unlisted -->
 	<AccessLevel Value="Public" />

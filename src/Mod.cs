@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 using Colossal.Logging;
 using Game;
 using Game.Modding;
@@ -17,12 +18,20 @@ namespace ServiceCoverageFix
             .SetShowsErrorsInUI(true);
 
         private Harmony? _harmony;
+        private DiagnosticSettings? _settings;
+        private DiagnosticLocale? _diagnosticLocale;
+
+        // Callable by diagnostic tools without parsing logs. Counters refer only
+        // to live simulation jobs, not the isolated startup probes.
+        public static CoverageRuntimeStatus GetRuntimeStatus() => RuntimeDiagnostics.Snapshot();
 
         public void OnLoad(UpdateSystem updateSystem)
         {
             try
             {
                 CompatibilityGate.Validate();
+                ApplyCoverageScheduleBridge.ValidateBridge(CompatibilityGate.ApplyCoverageJobType);
+                RuntimeDiagnostics.Initialize();
 
                 _harmony = new Harmony(HarmonyId);
                 _harmony.PatchAll(Assembly.GetExecutingAssembly());
@@ -32,6 +41,17 @@ namespace ServiceCoverageFix
                     throw new InvalidOperationException(
                         $"Expected one ApplyCoverageJob schedule replacement, found {ServiceCoverageSystemPatch.ReplacementCount}.");
                 }
+
+                RuntimeDiagnostics.MarkInstalled();
+                // The UI is optional: a presentation failure cannot unpatch the fix.
+                try
+                {
+                    _settings = new DiagnosticSettings(this);
+                    _diagnosticLocale = new DiagnosticLocale(_settings);
+                    Game.SceneFlow.GameManager.instance.localizationManager.AddSource("en-US", _diagnosticLocale);
+                    _settings.RegisterInOptionsUI();
+                }
+                catch (Exception uiError) { Log.Info($"Diagnostics panel unavailable: {uiError.Message}"); }
 
                 System.Version harmonyVersion = typeof(Harmony).Assembly.GetName().Version;
                 System.Version modVersion = Assembly.GetExecutingAssembly().GetName().Version;
@@ -46,7 +66,7 @@ namespace ServiceCoverageFix
                 }
 
                 Log.Info(
-                    $"Enabled ServiceCoverageFix {modVersion} record-local byte-radix hardened build " +
+                    $"Installed ServiceCoverageFix {modVersion}; bridge preflight passed; awaiting live coverage execution " +
                     $"with packaged Harmony {harmonyVersion}.");
             }
             catch (Exception exception)
@@ -61,14 +81,28 @@ namespace ServiceCoverageFix
                 }
 
                 _harmony = null;
+                try { RuntimeDiagnostics.Dispose(); }
+                catch (Exception cleanup) { Log.Error($"Diagnostic cleanup could not complete: {cleanup}"); }
                 Log.Error($"The stutter fix was disabled without changing simulation behavior: {exception}");
             }
         }
 
         public void OnDispose()
         {
-            _harmony?.UnpatchAll(HarmonyId);
-            _harmony = null;
+            try
+            {
+                _settings?.UnregisterInOptionsUI();
+                if (_diagnosticLocale != null)
+                    Game.SceneFlow.GameManager.instance.localizationManager.RemoveSource("en-US", _diagnosticLocale);
+            }
+            finally
+            {
+                _settings = null;
+                _diagnosticLocale = null;
+                _harmony?.UnpatchAll(HarmonyId);
+                _harmony = null;
+                RuntimeDiagnostics.Dispose();
+            }
         }
     }
 
@@ -84,6 +118,8 @@ namespace ServiceCoverageFix
             "Game.Simulation.ServiceCoverageSystem+ApplyCoverageJob";
 
         internal static Type ServiceCoverageSystemType { get; private set; } = null!;
+
+        internal static Type ApplyCoverageJobType { get; private set; } = null!;
 
         internal static bool IsUnverifiedGameBuild { get; private set; }
 
@@ -126,6 +162,13 @@ namespace ServiceCoverageFix
 
             ValidateNativeListField(jobType, "m_BuildingData", "BuildingData", 24);
             ValidateNativeListField(jobType, "m_Elements", "CoverageElement", 32);
+            if (!typeof(Unity.Jobs.IJob).IsAssignableFrom(jobType) || !jobType.IsValueType)
+                throw new InvalidOperationException("ApplyCoverageJob must remain an IJob value type.");
+            Type coverageType = AccessTools.TypeByName("Game.Net.ServiceCoverage")
+                ?? throw new TypeLoadException("Game.Net.ServiceCoverage");
+            ValidateLayout(coverageType, new[] { "m_Coverage" },
+                new[] { "Unity.Mathematics.float2" }, new[] { 0 });
+            ApplyCoverageJobType = jobType;
             ServiceCoverageSystemType = systemType;
         }
 
@@ -149,11 +192,37 @@ namespace ServiceCoverageFix
                     $"{fieldName} has unexpected element type {elementType.FullName}.");
             }
 
+            if (expectedElementName == "BuildingData")
+                ValidateLayout(elementType,
+                    new[] { "m_Entity", "m_ElementIndex", "m_ElementCount", "m_Total", "m_Remaining" },
+                    new[] { "Unity.Entities.Entity", "System.Int32", "System.Int32", "System.Single", "System.Single" },
+                    new[] { 0, 8, 12, 16, 20 });
+            else
+                ValidateLayout(elementType,
+                    new[] { "m_CoveragePtr", "m_Coverage", "m_AverageCoverage", "m_DensityFactor", "m_LengthFactor" },
+                    new[] { "System.Void*", "Unity.Mathematics.float2", "System.Single", "System.Single", "System.Single" },
+                    new[] { 0, 8, 16, 20, 24 });
+
             int actualSize = System.Runtime.InteropServices.Marshal.SizeOf(elementType);
             if (actualSize != expectedElementSize)
             {
                 throw new InvalidOperationException(
                     $"{elementType.FullName} is {actualSize} bytes; expected {expectedElementSize}.");
+            }
+        }
+
+        private static void ValidateLayout(Type type, string[] names, string[] types, int[] offsets)
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            if (!type.IsValueType || (!type.IsLayoutSequential && !type.IsExplicitLayout) ||
+                type.GetFields(flags).Length != names.Length)
+                throw new InvalidOperationException($"Unexpected layout for {type.FullName}.");
+            for (int i = 0; i < names.Length; i++)
+            {
+                FieldInfo? field = type.GetField(names[i], flags);
+                if (field == null || field.FieldType.FullName != types[i] ||
+                    Marshal.OffsetOf(type, names[i]).ToInt64() != offsets[i])
+                    throw new InvalidOperationException($"Unexpected type or offset for {type.FullName}.{names[i]}.");
             }
         }
 
@@ -171,3 +240,4 @@ namespace ServiceCoverageFix
         }
     }
 }
+

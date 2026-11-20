@@ -7,6 +7,7 @@ using HarmonyLib;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
+using Unity.Mathematics;
 
 namespace ServiceCoverageFix
 {
@@ -82,28 +83,82 @@ namespace ServiceCoverageFix
     {
         private static int _fallbackLogged;
 
+        internal static void ValidateBridge(Type applyJobType)
+        {
+            _fallbackLogged = 0;
+            MethodInfo method = typeof(ApplyCoverageScheduleBridge).GetMethod(
+                nameof(ValidateBridgeTyped), BindingFlags.Static | BindingFlags.NonPublic)!;
+            try { method.MakeGenericMethod(applyJobType).Invoke(null, null); }
+            catch (TargetInvocationException e) when (e.InnerException != null)
+            { throw new InvalidOperationException("Coverage bridge preflight failed.", e.InnerException); }
+        }
+
+        private static unsafe void ValidateBridgeTyped<TApplyJob>() where TApplyJob : struct, IJob
+        {
+            // Exercise field delegates, container copying, Unity scheduling, and
+            // actual worker execution using isolated data, never city buffers.
+            foreach (int count in new[] { 0, 1, 2 })
+            {
+                using (var buildings = new NativeList<RawBuildingData>(Math.Max(1, count), Allocator.TempJob))
+                using (var elements = new NativeList<RawCoverageElement>(Math.Max(1, count), Allocator.TempJob))
+                using (var targets = new NativeArray<float2>(Math.Max(1, count), Allocator.TempJob))
+                using (var counters = new NativeArray<ExecutionCounters>(1, Allocator.TempJob))
+                {
+                    var target = (float2*)NativeArrayUnsafeUtility.GetUnsafePtr(targets);
+                    for (int i = 0; i < count; i++)
+                    {
+                        buildings.Add(new RawBuildingData { ElementIndex = i, ElementCount = 1,
+                            Total = 10f, Remaining = 10f });
+                        elements.Add(new RawCoverageElement { CoveragePtr = target + i,
+                            Coverage = new float2(1f), AverageCoverage = 1f,
+                            DensityFactor = 1f, LengthFactor = 1f });
+                    }
+                    TApplyJob original = default;
+                    var buildingCopy = buildings;
+                    var elementCopy = elements;
+                    UnsafeUtility.MemCpy(ApplyJobFieldAccess<TApplyJob>.BuildingData(ref original).ToPointer(),
+                        UnsafeUtility.AddressOf(ref buildingCopy), UnsafeUtility.SizeOf<NativeList<RawBuildingData>>());
+                    UnsafeUtility.MemCpy(ApplyJobFieldAccess<TApplyJob>.Elements(ref original).ToPointer(),
+                        UnsafeUtility.AddressOf(ref elementCopy), UnsafeUtility.SizeOf<NativeList<RawCoverageElement>>());
+                    OptimizedApplyCoverageJob job = CreateOptimized(ref original);
+                    job.Diagnostics = (ExecutionCounters*)NativeArrayUnsafeUtility.GetUnsafePtr(counters);
+                    IJobExtensions.Schedule(job, default).Complete();
+                    if (counters[0].Started != 1 || counters[0].Completed != 1)
+                        throw new InvalidOperationException("Replacement execution was not observed during preflight.");
+                    for (int i = 0; i < count; i++)
+                        if (targets[i].x != 1f || targets[i].y != 1f)
+                            throw new InvalidOperationException("Coverage bridge preflight returned incorrect coverage.");
+                    if (counters[0].Managed != 0)
+                        Mod.Log.Info("Coverage preflight executed in managed mode; live execution mode will be tracked.");
+                }
+            }
+        }
+
+        private static OptimizedApplyCoverageJob CreateOptimized<TApplyJob>(ref TApplyJob originalJob)
+            where TApplyJob : struct, IJob
+        {
+            IntPtr buildingAddress = ApplyJobFieldAccess<TApplyJob>.BuildingData(ref originalJob);
+            IntPtr elementAddress = ApplyJobFieldAccess<TApplyJob>.Elements(ref originalJob);
+            return new OptimizedApplyCoverageJob
+            {
+                BuildingData = CopyNativeList<RawBuildingData>(buildingAddress),
+                Elements = CopyNativeList<RawCoverageElement>(elementAddress)
+            };
+        }
+
         public static JobHandle ScheduleOptimized<TApplyJob>(
             TApplyJob originalJob,
             JobHandle dependency)
             where TApplyJob : struct, IJob
         {
+            RuntimeDiagnostics.ReportTransition();
             try
             {
-                IntPtr buildingAddress =
-                    ApplyJobFieldAccess<TApplyJob>.BuildingData(ref originalJob);
-                IntPtr elementAddress =
-                    ApplyJobFieldAccess<TApplyJob>.Elements(ref originalJob);
-
-                var optimizedJob = new OptimizedApplyCoverageJob
-                {
-                    BuildingData = CopyNativeList<RawBuildingData>(buildingAddress),
-                    Elements = CopyNativeList<RawCoverageElement>(elementAddress)
-                };
-
-                return IJobExtensions.Schedule(optimizedJob, dependency);
+                return RuntimeDiagnostics.Schedule(CreateOptimized(ref originalJob), dependency);
             }
             catch (Exception exception)
             {
+                RuntimeDiagnostics.RecordFallback(exception);
                 if (Interlocked.Exchange(ref _fallbackLogged, 1) == 0)
                 {
                     Mod.Log.Error(
@@ -185,3 +240,4 @@ namespace ServiceCoverageFix
         }
     }
 }
+

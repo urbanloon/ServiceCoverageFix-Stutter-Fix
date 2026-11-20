@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Unity.Burst;
 using Unity.Burst.CompilerServices;
 using Unity.Collections;
@@ -84,8 +85,27 @@ namespace ServiceCoverageFix
         [NativeDisableContainerSafetyRestriction]
         internal NativeList<RawCoverageElement> Elements;
 
+        [NativeDisableUnsafePtrRestriction]
+        internal ExecutionCounters* Diagnostics;
+
         [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
         public void Execute()
+        {
+            if (Diagnostics != null)
+            {
+                Interlocked.Increment(ref Diagnostics->Started);
+                bool managed = false;
+                MarkManaged(ref managed);
+                if (managed) Interlocked.Increment(ref Diagnostics->Managed);
+            }
+            ExecuteCoverage();
+            if (Diagnostics != null) Interlocked.Increment(ref Diagnostics->Completed);
+        }
+
+        [BurstDiscard]
+        private static void MarkManaged(ref bool managed) { managed = true; }
+
+        private void ExecuteCoverage()
         {
             FilterInactiveRecords();
             int recordCount = BuildingData.Length;
@@ -542,3 +562,4 @@ namespace ServiceCoverageFix
         }
     }
 }
+
