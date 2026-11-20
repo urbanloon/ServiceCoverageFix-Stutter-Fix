@@ -24,7 +24,7 @@ calculations.
 | [`BENCHMARKS.md`](BENCHMARKS.md) | Native selector-only benchmark methodology, results, and rejected candidates |
 | [`src/OptimizedApplyCoverageJob.cs`](src/OptimizedApplyCoverageJob.cs) | Published 0.3.2 record-local byte-radix implementation |
 | [`src/ServiceCoverageSystemPatch.cs`](src/ServiceCoverageSystemPatch.cs) | Harmony schedule-call replacement and managed fallback bridge |
-| [`src/Mod.cs`](src/Mod.cs) | Load, unload, hash warning, and structural compatibility gate |
+| [`src/Mod.cs`](src/Mod.cs) | Load, unload, build diagnostics, and structural compatibility gate |
 | [`tests/reference_model.py`](tests/reference_model.py) | Executable reference models, ordering properties, layout proof, and stress tests |
 | [`archive-v0.1.8`](https://github.com/urbanloon/ServiceCoverageFix-Stutter-Fix/tree/archive-v0.1.8/ServiceCoverageFix) | Exact original 0.1.8 source snapshot |
 
@@ -35,6 +35,13 @@ captures, raw frame-time captures, native benchmark raw timings, or the native
 development benchmark harness. Measurements derived from those artifacts are
 reported here and in the analysis documents, but the underlying artifacts are
 not archived in this repository.
+
+## Source update: 0.3.3
+
+Removes the compatibility error popup when a different game build passes all
+structural and scheduling checks. The build hash is logged at information level.
+Actual loading failures still report errors. Coverage logic is unchanged from
+0.3.2. This source update must be rebuilt and published to update installed mods.
 
 ## Public version history
 
@@ -607,7 +614,7 @@ Version 0.3.2 was verified against `Game.dll` SHA-256:
 
 `721e7e17bf74299aa2b988c1bd07e90874bb8bc72d263229500c4bf639e7e4ee`
 
-For a different hash, the current startup path verifies that:
+The startup path verifies that:
 
 - `Game.Simulation.ServiceCoverageSystem` exists;
 - its nested `ApplyCoverageJob` exists with the expected full name;
@@ -618,8 +625,9 @@ For a different hash, the current startup path verifies that:
 
 These are defensive structural checks, not proof that an unknown future build
 is semantically compatible. The current gate does not reflect over every
-internal element field type or offset. A different game hash therefore produces
-a visible compatibility warning even when the listed checks pass. If a listed
+internal element field type or offset. In 0.3.3, a different game hash is recorded at information level after the
+listed checks pass, without a compatibility popup. This does not certify an
+unknown build's behavior. If a listed
 check fails, the mod fails closed during loading and removes its patch.
 
 If the managed bridge cannot construct the typed views for one update, it logs
@@ -638,7 +646,7 @@ mod. Its notice is retained in
 2. Select **Release** and choose **Build > Rebuild Solution**.
 3. Confirm `1 succeeded, 0 failed` and that the load message begins with:
 
-   `Enabled ServiceCoverageFix 0.3.2.0 record-local byte-radix hardened build`
+   `Enabled ServiceCoverageFix 0.3.3.0 record-local byte-radix hardened build`
 
 4. Run:
 

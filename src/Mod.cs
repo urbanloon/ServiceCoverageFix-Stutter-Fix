@@ -37,17 +37,11 @@ namespace ServiceCoverageFix
                 System.Version modVersion = Assembly.GetExecutingAssembly().GetName().Version;
                 if (CompatibilityGate.IsUnverifiedGameBuild)
                 {
-                    // SetShowsErrorsInUI is the only reliable built-in way for a
-                    // code mod to surface a startup message. This is deliberately
-                    // logged at error severity so the compatibility warning is
-                    // visible; the mod remains enabled because every structural
-                    // and scheduling check below the hash gate succeeded.
-                    Log.Error(
-                        "COMPATIBILITY WARNING: ServiceCoverageFix is running on an " +
-                        "unverified Cities: Skylines II version. The required job " +
-                        "and memory layouts still match, so the mod was enabled, " +
-                        "but compatibility is not guaranteed. Back up important " +
-                        "saves and report unexpected behavior. " +
+                    // A new game hash is diagnostic information, not a load failure.
+                    // Structural validation and the schedule replacement have succeeded.
+                    Log.Info(
+                        "Game build differs from the verified baseline; structural " +
+                        "and scheduling checks passed. " +
                         $"Game.dll SHA-256: {CompatibilityGate.ActualGameSha256}");
                 }
 
