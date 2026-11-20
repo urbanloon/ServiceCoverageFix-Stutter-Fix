@@ -17,7 +17,7 @@
 
 		The mod does not skip coverage updates, reduce their frequency, approximate calculations, or add custom save data. It can be removed safely to restore the original game implementation.
 
-		Unverified game versions receive a compatibility warning. The mod will only enable when the required job, fields, memory layouts, and scheduling call remain structurally compatible. Otherwise, it fails closed and leaves the vanilla job untouched.
+		Version 0.3.3 retains the existing 0.3.2 compatibility checks. A different Game.dll fingerprint is now informational and does not trigger a popup. Failures detected by the existing job, element-size, scheduling or patch checks still show an error. Passing these checks does not guarantee compatibility with every game version.
 
 		Harmony 2.2.2 is packaged privately. No external dependency or DLC is required.
 	</LongDescription>
@@ -29,11 +29,11 @@
 	<Tag Value="Code Mod" />
 
 	<!-- Version -->
-	<ModVersion Value="0.3.2" />
+	<ModVersion Value="0.3.3" />
 	<GameVersion Value="*" />
 
-	<!-- Changes from the currently published 0.1.8 version -->
-	<ChangeLog Value="Replaces the 33-bucket selector with a faster four-stage byte-radix queue using direct occupied-bucket lookup, cached minima, repeated-winner batching, and a hardened record-local memory layout. Removes diagnostic logging and the park-deletion test hotkey. Adds guarded compatibility support for unverified game versions." />
+	<!-- Changes from version 0.3.2 -->
+	<ChangeLog Value="Removes the version-only compatibility popup by logging that notice at Info level. Retains all 0.3.2 compatibility checks, actual failure errors, coverage calculations, scheduling and Harmony 2.2.2. No optimization changes." />
 
 	<!-- Supported values: Public, Private, Unlisted -->
 	<AccessLevel Value="Public" />
