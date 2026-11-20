@@ -14,16 +14,6 @@ The service-coverage fix runs automatically. **Options → Service Coverage Stut
 | Route search | Selecting the next step in large route searches. |
 | Company property search | Checking occupancy while businesses compare properties. |
 
-All three options start off. These beta options may be incompatible with Big City Performance.
+All three options are off by default. These beta options may be incompatible with Big City Performance.
 
-## Build
-
-Open `ServiceCoverageFix.sln` in Visual Studio with the Cities: Skylines II modding toolchain and .NET 8 SDK installed. Choose **Release → Build Solution**. NuGet restores the dependencies on the first build. The build generates the route and company property workers from the installed game assemblies.
-
-## Verification and technical details
-
-- Run `python tests/reference_model.py` to check coverage ordering, including equal priorities and large provider counts.
-- The [release build checks](tests/release_build/README.md) verify the solution, scheduling patches and Windows Burst workers against local game assemblies.
-- The [original stutter analysis](ANALYSIS.md), [coverage benchmarks](BENCHMARKS.md) and [0.3.3 algorithm write-up](https://github.com/urbanloon/ServiceCoverageFix-Stutter-Fix/blob/77dbcd3af472dec6ff74abcdeb3961ffe0c1e6e0/README.md) document the earlier service-coverage work.
-
-[MIT license](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.txt)
+The housing and resource-seller search options are back in development.
