@@ -1,13 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <CSII_TOOLPATH Condition="'$(CSII_TOOLPATH)' == '' and '$(OS)' == 'Windows_NT'">$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))</CSII_TOOLPATH>
     <Configurations>Debug;Release</Configurations>
+    <DefineConstants>$(DefineConstants);SCF_BETA</DefineConstants>
     <AssemblyName>ServiceCoverageFix</AssemblyName>
     <RootNamespace>ServiceCoverageFix</RootNamespace>
-    <Version>0.3.3</Version>
+    <Version>0.4.0</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <!-- Ensure third-party runtime assemblies are placed beside the mod DLL. -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
@@ -15,9 +18,14 @@
     <PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+  </ItemGroup>
+
   <!-- Imports must remain after the first PropertyGroup. -->
-  <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
-  <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.targets" />
+  <Import Project="$(CSII_TOOLPATH)\Mod.props" />
+  <Import Project="$(CSII_TOOLPATH)\Mod.targets" />
+  <Import Project="tools/WorkerGenerator.targets" />
 
   <ItemGroup>
     <!-- Runtime-private dependency. The mod no longer depends on the stale
@@ -27,7 +35,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Reference Include="Unity.Entities"><Private>false</Private></Reference>
+    <Reference Include="Colossal.Collections"><Private>false</Private></Reference>
+    <Reference Include="Colossal.Mathematics"><Private>false</Private></Reference>
     <Reference Include="Game"><Private>false</Private></Reference>
+    <Reference Include="Colossal.Mono.Cecil"><Private>false</Private></Reference>
     <Reference Include="Colossal.Core"><Private>false</Private></Reference>
     <Reference Include="Colossal.Logging"><Private>false</Private></Reference>
     <Reference Include="Colossal.IO.AssetDatabase"><Private>false</Private></Reference>
@@ -59,3 +71,4 @@
   </Target>
 
 </Project>
+

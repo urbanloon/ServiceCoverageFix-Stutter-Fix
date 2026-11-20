@@ -1,5 +1,8 @@
 using System.Collections.Generic;
+using MethodImpl = System.Runtime.CompilerServices.MethodImplAttribute;
+using MethodImplOptions = System.Runtime.CompilerServices.MethodImplOptions;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Unity.Burst;
 using Unity.Burst.CompilerServices;
 using Unity.Collections;
@@ -74,8 +77,7 @@ namespace ServiceCoverageFix
     {
         private const int ByteRadixBucketCount = 1025;
         private const int OccupancyWordCount = 17;
-        private const int WinnerProbeWindow = 4096;
-        private const int WinnerProbePercent = 5;
+        private const int SmallMergeLimit = 16;
 
         [NativeDisableContainerSafetyRestriction]
         internal NativeList<RawBuildingData> BuildingData;
@@ -84,14 +86,40 @@ namespace ServiceCoverageFix
         [NativeDisableContainerSafetyRestriction]
         internal NativeList<RawCoverageElement> Elements;
 
+        [NativeDisableUnsafePtrRestriction]
+        internal ExecutionCounters* Diagnostics;
+
         [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
         public void Execute()
         {
+            if (Diagnostics != null)
+            {
+                Interlocked.Increment(ref Diagnostics->Started);
+                bool managed = false;
+                MarkManaged(ref managed);
+                if (managed) Interlocked.Increment(ref Diagnostics->Managed);
+            }
+            WorkloadCounts workload = ExecuteCoverage();
+            if (Diagnostics != null)
+            {
+                // A slot has one writer until its handle is reclaimed. Completed
+                // publishes all four fields to readers with one release fence.
+                Diagnostics->Workload = workload;
+                Interlocked.Increment(ref Diagnostics->Completed);
+            }
+        }
+
+        [BurstDiscard]
+        private static void MarkManaged(ref bool managed) { managed = true; }
+
+        private WorkloadCounts ExecuteCoverage()
+        {
             FilterInactiveRecords();
             int recordCount = BuildingData.Length;
+            var workload = new WorkloadCounts { Providers = recordCount, Reserved = Elements.Length };
             if (recordCount == 0)
             {
-                return;
+                return workload;
             }
 
             // Preserve the game's exact NativeSort and concrete initial tie order.
@@ -109,47 +137,180 @@ namespace ServiceCoverageFix
             // record boundary. Queue nodes reuse the game's existing records
             // rather than allocator-backed or heap storage.
             ProviderSlot* slots = (ProviderSlot*)records;
-            InitializeSlots(slots, recordCount);
+            workload.Available = InitializeSlots(slots, recordCount);
 
+            int skipped;
             if (recordCount == 1)
             {
-                ExecuteSingleProvider(&slots[0].State, elements);
-                return;
+                skipped = ExecuteSingleProvider(&slots[0].State, elements);
             }
-
-            ExecuteByteRadixMerge(slots, elements, recordCount);
+            else if (recordCount <= SmallMergeLimit)
+            {
+                skipped = ExecuteSmallMerge(slots, elements, recordCount);
+            }
+            else
+            {
+                skipped = ExecuteByteRadixMerge(slots, elements, recordCount);
+            }
+            workload.Processed = workload.Available - skipped;
+            return workload;
         }
 
-        private static void InitializeSlots(
+        private static int InitializeSlots(
             ProviderSlot* slots,
             int recordCount)
         {
+            int available = 0;
             for (int i = 0; i < recordCount; i++)
             {
                 // State.NextIndex aliases RawBuildingData.ElementIndex and
                 // State.EndIndex initially aliases ElementCount. Only the latter
                 // needs conversion. Node bytes are initialized when enqueued.
                 ProviderState* state = &slots[i].State;
+                available += state->EndIndex;
                 state->EndIndex += state->NextIndex;
             }
+            return available;
         }
 
-        private static void ExecuteSingleProvider(
+        private static int ExecuteSingleProvider(
             [NoAlias] ProviderState* state,
             [NoAlias] RawCoverageElement* elements)
         {
-            while (state->NextIndex != state->EndIndex)
+            ProviderState local = *state;
+            int cursor = local.NextIndex;
+            int end = local.EndIndex;
+            while (cursor != end)
             {
-                int elementIndex = state->NextIndex++;
-                if (!ApplyElement(state, elements + elementIndex))
+                if (!ApplyElement(&local, elements + cursor++))
                 {
+                    break;
+                }
+            }
+            return end - cursor;
+        }
+
+        private static int ExecuteOrderedMerge(
+            [NoAlias] ProviderSlot* slots,
+            [NoAlias] RawCoverageElement* elements,
+            int recordCount)
+        {
+            // Follow the game's adjacent reinsertion comparisons for
+            // unordered initial heads. Links preserve the exact
+            // order of the sorted records even when NaN separates two runs.
+            for (int i = 0; i < recordCount - 1; i++)
+            {
+                slots[i].Node.Next = i + 1;
+            }
+            slots[recordCount - 1].Node.Next = -1;
+
+            int skipped = 0;
+            int winner = 0;
+            while (true)
+            {
+                int runnerUp = slots[winner].Node.Next;
+                ProviderState* state = &slots[winner].State;
+                if (runnerUp == -1)
+                {
+                    return skipped + ExecuteSingleProvider(state, elements);
+                }
+
+                float runnerKey = elements[slots[runnerUp].State.NextIndex].AverageCoverage;
+                while (true)
+                {
+                    int index = state->NextIndex++;
+                    if (!ApplyElement(state, elements + index) || state->NextIndex == state->EndIndex)
+                    {
+                        skipped += state->EndIndex - state->NextIndex;
+                        winner = runnerUp;
+                        break;
+                    }
+
+                    float key = elements[state->NextIndex].AverageCoverage;
+                    if (!(key < runnerKey))
+                    {
+                        continue;
+                    }
+
+                    int previous = runnerUp;
+                    int next = slots[previous].Node.Next;
+                    while (next != -1 && key < elements[slots[next].State.NextIndex].AverageCoverage)
+                    {
+                        previous = next;
+                        next = slots[next].Node.Next;
+                    }
+                    slots[previous].Node.Next = winner;
+                    slots[winner].Node.Next = next;
+                    winner = runnerUp;
                     break;
                 }
             }
         }
 
+        // The highest-priority entry sits at the end. Each losing winner is
+        // reinserted above its ties, following the game's ordered comparisons.
+        private struct QueueEntry
+        {
+            internal int Index;
+            internal float Key;
+        }
+
         [SkipLocalsInit]
-        private static void ExecuteByteRadixMerge(
+        private static int ExecuteSmallMerge(
+            [NoAlias] ProviderSlot* slots,
+            [NoAlias] RawCoverageElement* elements, int count)
+        {
+            QueueEntry* queue = stackalloc QueueEntry[SmallMergeLimit];
+            int length = count - 1;
+            for (int i = 0; i < length; i++)
+            {
+                int index = count - i - 1;
+                queue[i] = new QueueEntry { Index = index, Key = elements[slots[index].State.NextIndex].AverageCoverage };
+            }
+            int winner = 0;
+            int skipped = 0;
+            while (length != 0)
+            {
+                QueueEntry runner = queue[--length];
+                ProviderState* state = &slots[winner].State;
+                ProviderState local = *state;
+                int cursor = local.NextIndex;
+                int end = local.EndIndex;
+                while (true)
+                {
+                    int index = cursor++;
+                    bool hasNext = cursor != end;
+                    float next = hasNext ? elements[cursor].AverageCoverage : 0f;
+                    bool live = ApplyElement(&local, elements + index);
+                    if (!live || !hasNext)
+                    {
+                        skipped += end - cursor;
+                        break;
+                    }
+                    if (!(next < runner.Key))
+                    {
+                        continue;
+                    }
+
+                    int position = length;
+                    while (position != 0 && next < queue[position - 1].Key)
+                    {
+                        queue[position] = queue[position - 1];
+                        position--;
+                    }
+                    queue[position] = new QueueEntry { Index = winner, Key = next };
+                    length++;
+                    break;
+                }
+                state->NextIndex = cursor;
+                state->Remaining = local.Remaining;
+                winner = runner.Index;
+            }
+            return skipped + ExecuteSingleProvider(&slots[winner].State, elements);
+        }
+
+        [SkipLocalsInit]
+        private static int ExecuteByteRadixMerge(
             [NoAlias] ProviderSlot* slots,
             [NoAlias] RawCoverageElement* elements,
             int recordCount)
@@ -174,139 +335,73 @@ namespace ServiceCoverageFix
 
             uint occupiedWordMask = 0;
             uint lastPriority = 0;
-            int winnerProbeRemaining = WinnerProbeWindow;
-            int winnerProbeHits = 0;
-            bool useFullWinnerProbe = true;
-
-            // Reverse prepend retains NativeSort's concrete order, including ties.
-            for (int i = recordCount - 1; i >= 0; i--)
+            // The first sorted provider is already the winner. NaN can split
+            // the initial list into ordered runs; until all heads are known to
+            // be ordered, no provider state or coverage target is advanced.
+            if (math.isnan(elements[slots[0].State.NextIndex].AverageCoverage))
             {
-                uint priority = GetPriority(
-                    elements[slots[i].State.NextIndex].AverageCoverage);
+                return ExecuteOrderedMerge(slots, elements, recordCount);
+            }
+            // Reverse prepend retains the sorted order among the other providers.
+            for (int i = recordCount - 1; i >= 1; i--)
+            {
+                float first = elements[slots[i].State.NextIndex].AverageCoverage;
+                if (math.isnan(first))
+                {
+                    return ExecuteOrderedMerge(slots, elements, recordCount);
+                }
+                uint priority = GetPriority(first);
                 BytePrepend(
                     slots, heads, tails, minimums, occupancy,
                     ref occupiedWordMask, i,
                     GetByteBucket(priority, lastPriority), priority);
             }
 
+            int winner = 0;
+            int skipped = 0;
             while (occupiedWordMask != 0)
             {
-                if (heads[0] == -1)
-                {
-                    ByteRefillZero(
-                        slots, heads, tails, minimums, occupancy,
-                        ref occupiedWordMask, ref lastPriority);
-                }
-
-                int providerIndex = heads[0];
-                heads[0] = slots[providerIndex].Node.Next;
-                if (heads[0] == -1)
-                {
-                    ClearByteBucket(
-                        heads, occupancy, ref occupiedWordMask, 0);
-                }
-
-                ProviderState* state = &slots[providerIndex].State;
+                // The strongest competitor stays fixed until this provider
+                // loses or exhausts its budget. An equal or unordered next
+                // key keeps the winner, matching vanilla's ordered '<' test.
+                int runnerUp = ByteTakeWinner(slots, heads, tails, minimums, occupancy,
+                    ref occupiedWordMask, ref lastPriority);
+                float cutoff = elements[slots[runnerUp].State.NextIndex].AverageCoverage;
+                ProviderState* state = &slots[winner].State;
+                ProviderState local = *state;
+                int cursor = local.NextIndex;
+                int end = local.EndIndex;
                 while (true)
                 {
-                    int elementIndex = state->NextIndex++;
-                    bool hasNextElement = state->NextIndex != state->EndIndex;
-
-                    // Issue the next stream-key load before following the current
-                    // element's random CoveragePtr. It is immutable and needed on
-                    // the overwhelmingly common live-provider path, so this gives
-                    // the CPU independent memory work without an unavailable
-                    // experimental Burst prefetch intrinsic.
-                    float nextAverageCoverage = hasNextElement
-                        ? elements[state->NextIndex].AverageCoverage
-                        : 0f;
-                    bool hasBudget = ApplyElement(state, elements + elementIndex);
-
-                    if (!hasNextElement || !hasBudget)
+                    int index = cursor++;
+                    bool hasNext = cursor != end;
+                    float next = hasNext ? elements[cursor].AverageCoverage : 0f;
+                    bool live = ApplyElement(&local, elements + index);
+                    if (!live || !hasNext)
                     {
+                        skipped += end - cursor;
                         break;
                     }
-
-                    // The selected provider is temporarily outside the queue. If
-                    // its removal emptied the occupancy directory, no competitor
-                    // remains and priorities are irrelevant for its serial tail.
-                    if (occupiedWordMask == 0)
+                    if (!(next < cutoff))
                     {
                         continue;
                     }
 
-                    uint priority = GetPriority(nextAverageCoverage);
-
-                    // Equality is free to prove: vanilla inserts the newly
-                    // advanced provider before every existing equal provider.
-                    if (priority == lastPriority)
-                    {
-                        continue;
-                    }
-
-                    // A broader competitor peek is exact but can cost more than
-                    // it saves on extremely interleaved streams. Sample the first
-                    // 4,096 non-equal advances and retain it only at a >=5% hit
-                    // rate. The policy changes only whether an algebraically
-                    // redundant reinsert/pop pair is executed, never selection.
-                    bool remainsWinner = false;
-                    if (useFullWinnerProbe)
-                    {
-                        remainsWinner = RemainsWinnerBeyondZero(
-                            heads, minimums, occupancy,
-                            occupiedWordMask, priority);
-
-                        if (winnerProbeRemaining != 0)
-                        {
-                            winnerProbeRemaining--;
-                            if (remainsWinner)
-                            {
-                                winnerProbeHits++;
-                            }
-
-                            if (winnerProbeRemaining == 0)
-                            {
-                                useFullWinnerProbe =
-                                    winnerProbeHits * 100 >=
-                                    WinnerProbePercent * WinnerProbeWindow;
-                            }
-                        }
-                    }
-
-                    if (remainsWinner)
-                    {
-                        continue;
-                    }
-
-                    BytePrepend(
-                        slots, heads, tails, minimums, occupancy,
-                        ref occupiedWordMask, providerIndex,
-                        GetByteBucket(priority, lastPriority), priority);
+                    uint priority = GetPriority(next);
+                    BytePrepend(slots, heads, tails, minimums, occupancy,
+                        ref occupiedWordMask, winner, GetByteBucket(priority, lastPriority), priority);
                     break;
                 }
+                state->NextIndex = cursor;
+                state->Remaining = local.Remaining;
+                winner = runnerUp;
             }
+            return skipped + ExecuteSingleProvider(&slots[winner].State, elements);
         }
 
-        private static bool RemainsWinnerBeyondZero(
-            int* heads,
-            uint* minimums,
-            ulong* occupancy,
-            uint occupiedWordMask,
-            uint priority)
-        {
-            // A live bucket zero contains a competitor at lastPriority. The
-            // caller already excluded equality, so this provider cannot win.
-            if (heads[0] != -1)
-            {
-                return false;
-            }
-
-            int sourceBucket = GetLowestOccupiedBucket(
-                occupancy, occupiedWordMask);
-            return priority <= minimums[sourceBucket];
-        }
-
-        private static void ByteRefillZero(
+        // Burst otherwise emits a call for each change of winning provider.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int ByteTakeWinner(
             ProviderSlot* slots,
             int* heads,
             int* tails,
@@ -315,12 +410,40 @@ namespace ServiceCoverageFix
             ref uint occupiedWordMask,
             ref uint lastPriority)
         {
+            int current = heads[0];
+            if (current != -1)
+            {
+                heads[0] = slots[current].Node.Next;
+                if (heads[0] == -1)
+                {
+                    ClearByteBucket(heads, occupancy, ref occupiedWordMask, 0);
+                }
+                return current;
+            }
+
             int sourceBucket = GetLowestOccupiedBucket(
                 occupancy, occupiedWordMask);
             lastPriority = minimums[sourceBucket];
-            int current = heads[sourceBucket];
+            current = heads[sourceBucket];
             ClearByteBucket(
                 heads, occupancy, ref occupiedWordMask, sourceBucket);
+
+            // A singleton can be returned without entering bucket zero.
+            if (current == tails[sourceBucket])
+            {
+                return current;
+            }
+
+            // All four bytes of a lowest-octet bucket's priority are fixed.
+            // Its existing linked list already has the sorted tie order.
+            if (sourceBucket <= 256)
+            {
+                heads[0] = slots[current].Node.Next;
+                tails[0] = tails[sourceBucket];
+                minimums[0] = lastPriority;
+                SetByteBucketOccupied(occupancy, ref occupiedWordMask, 0);
+                return current;
+            }
 
             // Append preserves concrete order; node.Priority is already cached.
             do
@@ -334,6 +457,14 @@ namespace ServiceCoverageFix
                 current = next;
             }
             while (current != -1);
+
+            current = heads[0];
+            heads[0] = slots[current].Node.Next;
+            if (heads[0] == -1)
+            {
+                ClearByteBucket(heads, occupancy, ref occupiedWordMask, 0);
+            }
+            return current;
         }
 
         private static void BytePrepend(
@@ -411,11 +542,7 @@ namespace ServiceCoverageFix
             uint occupiedWordMask)
         {
             int sourceWord = math.tzcnt(occupiedWordMask);
-            ulong value = occupancy[sourceWord];
-            uint low = (uint)value;
-            int bit = low != 0
-                ? math.tzcnt(low)
-                : 32 + math.tzcnt((uint)(value >> 32));
+            int bit = math.tzcnt(occupancy[sourceWord]);
             return (sourceWord << 6) + bit;
         }
 
@@ -515,14 +642,17 @@ namespace ServiceCoverageFix
         private static uint GetPriority(float coverage)
         {
             uint bits = math.asuint(coverage);
+            // In denormals-are-zero mode, vanilla's float comparer treats both
+            // signs of subnormals as zero. Ask the same comparison only for a
+            // zero exponent; otherwise preserve the normal/infinity bit order.
+            if ((bits & 0x7F800000u) == 0 && coverage == 0f)
+                return 0x7FFFFFFFu;
             if ((bits & 0x80000000u) == 0)
             {
                 return bits ^ 0x7FFFFFFFu;
             }
 
-            return (bits & 0x7FFFFFFFu) == 0
-                ? 0x7FFFFFFFu
-                : bits;
+            return bits;
         }
 
         private struct BuildingDataComparer : IComparer<RawBuildingData>
@@ -542,3 +672,4 @@ namespace ServiceCoverageFix
         }
     }
 }
+

@@ -9,6 +9,17 @@
 	<LongDescription><![CDATA[
 Some cities experience a severe, rhythmic CPU stall while the simulation is running. At 1× speed, the hitch repeats approximately every 4.4 seconds and can freeze the game for 74–97 milliseconds. At higher simulation speeds, the same service-coverage workload runs more frequently.
 
+**New in 0.4.0: Optional beta settings**
+
+Fixing service coverage can still leave slowdowns from other simulation jobs. These four options target those jobs. You can enable them individually under **Options → Service Coverage Stutter Fix → Beta options**. All four are off by default.
+
+- **Water flow:** When the game calculates water and sewage flow, it repeatedly picks the next pipe junction to check. This speeds up that step on branching networks.
+- **Resource-seller search:** When a buyer compares sellers, several can use the same market price. The game now looks up that price once per group of sellers and reuses it.
+- **Route search:** When thousands of possible route steps are waiting, the game spends time keeping them in order. This makes it faster to take the next step from the queue. PathfindLocalityFix takes priority when both mods are loaded.
+- **Housing search:** A household can consider many homes in one search. This reuses its income and support information across a group of homes instead of recalculating it for each one.
+
+The four betas matched vanilla results in offline tests. The FPS figures and 24 hours of playtesting below refer to the original service-coverage fix.
+
 **ETW tracing and native-code analysis identified the hotspot as:**
 
 - Game.Simulation.ServiceCoverageSystem.ApplyCoverageJob.Execute()
@@ -59,17 +70,18 @@ P.S. If you're curious about the computer-science idea behind why changing an al
 ]]></LongDescription>
 
 	<!-- Thumbnail -->
-	<Thumbnail Value="Properties/Thumbnail.png" />
+	<Thumbnail Value="Properties/Thumbnail.jpg" />
 
 	<!-- Classification -->
 	<Tag Value="Code Mod" />
 
 	<!-- Version -->
-	<ModVersion Value="0.3.3" />
+	<ModVersion Value="0.4.0" />
 	<GameVersion Value="*" />
 
-	<!-- Changes from version 0.3.2 -->
-	<ChangeLog Value="Removes the compatibility error popup on structurally compatible game updates. Build differences are logged as information. Retains structural validation, patch checks, genuine error reporting, and the existing coverage optimization." />
+	<ChangeLog>- Added four optional performance settings for water flow, resource-seller search, route search and housing search. All four are off by default.
+- Added Beta worker status in Options so you can see which settings are active or unavailable.
+- Updated the mod thumbnail.</ChangeLog>
 
 	<!-- Supported values: Public, Private, Unlisted -->
 	<AccessLevel Value="Public" />

@@ -1,0 +1,26 @@
+<Project>
+  <PropertyGroup>
+    <_ScfGenerator>$(MSBuildThisFileDirectory)WorkerGenerator/WorkerGenerator.csproj</_ScfGenerator>
+  </PropertyGroup>
+  <ItemGroup>
+    <UpToDateCheckInput Include="$(MSBuildThisFileDirectory)WorkerGenerator/*.cs;$(MSBuildThisFileDirectory)WorkerGenerator/*.csproj" />
+  </ItemGroup>
+  <Target Name="GenerateServiceCoverageWorkers" BeforeTargets="CoreCompile" DependsOnTargets="ResolveReferences"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_ScfGame Include="@(ReferencePath)" Condition="'%(ReferencePath.Filename)' == 'Game'" />
+    </ItemGroup>
+    <Error Condition="'@(_ScfGame->Count())' != '1'" Text="Expected one resolved Game.dll reference." />
+    <PropertyGroup>
+      <_ScfGameFile>@(_ScfGame->'%(FullPath)')</_ScfGameFile>
+      <_ScfManaged>$([System.IO.Path]::GetDirectoryName('$(_ScfGameFile)'))</_ScfManaged>
+      <_ScfGenArtifacts>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'generator-tool'))</_ScfGenArtifacts>
+      <_ScfGenOutput>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'generated-workers'))</_ScfGenOutput>
+    </PropertyGroup>
+    <Exec Command="dotnet build &quot;$(_ScfGenerator)&quot; --artifacts-path &quot;$(_ScfGenArtifacts)&quot; -c Release --nologo -p:DecompilerDir=&quot;$(DecompilerDir)&quot;" />
+    <Exec Command="dotnet &quot;$(_ScfGenArtifacts)/bin/WorkerGenerator/release/WorkerGenerator.dll&quot; &quot;$(_ScfManaged)&quot; &quot;$(_ScfGenOutput)&quot;" />
+    <ItemGroup>
+      <Compile Include="$(_ScfGenOutput)/RouteBody.g.cs;$(_ScfGenOutput)/WorkerManifest.g.cs" />
+    </ItemGroup>
+  </Target>
+</Project>

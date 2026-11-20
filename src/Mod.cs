@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
 using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 using Colossal.Logging;
 using Game;
 using Game.Modding;
@@ -12,20 +15,60 @@ namespace ServiceCoverageFix
     public sealed class Mod : IMod
     {
         internal const string HarmonyId = "com.servicecoveragefix.applycoverage.byteradix";
-        internal static readonly ILog Log = LogManager
-            .GetLogger("ServiceCoverageFix")
-            .SetShowsErrorsInUI(true);
+        private static class Logger
+        {
+            internal static readonly ILog Instance = LogManager.GetLogger("ServiceCoverageFix").SetShowsErrorsInUI(true);
+        }
+        internal static ILog Log => Logger.Instance;
 
+        private static Mod? _owner;
+        private string? _compatibilityInactiveReason;
+        internal static string? CompatibilityInactiveReason =>
+            Volatile.Read(ref _owner)?._compatibilityInactiveReason;
         private Harmony? _harmony;
+#if SCF_BETA
+        private BetaRuntime? _beta;
+        internal void ChangeBeta(BetaFeature feature, bool enabled) => _beta?.Set(feature, enabled);
+        internal string BetaStatus(BetaFeature feature) => _beta?.Status(feature) ?? "Unavailable";
+#endif
+        private DiagnosticSettings? _settings;
+        private DiagnosticLocale? _diagnosticLocale;
+        private Action? _stopTrackingGameLoads;
+        internal bool IsOwner => ReferenceEquals(Volatile.Read(ref _owner), this);
+
+        // Callable by diagnostic tools without parsing logs. Counters refer only
+        // to live simulation and preview jobs. The isolated startup probes are excluded.
+        public static CoverageRuntimeStatus GetRuntimeStatus() => RuntimeDiagnostics.Snapshot();
 
         public void OnLoad(UpdateSystem updateSystem)
         {
+            // A second instance must never remove the first instance's patch or
+            // free diagnostics still in use, including during retryable teardown.
+            if (Interlocked.CompareExchange(ref _owner, this, null) != null) return;
+            _compatibilityInactiveReason = null;
             try
             {
-                CompatibilityGate.Validate();
+                try { CompatibilityGate.Validate(); }
+                catch (CoverageContractMismatch mismatch)
+                {
+                    // The gate runs before any patch or worker allocation. Keep
+                    // the Options panel available to explain this checked state.
+                    _compatibilityInactiveReason = "Inactive. " + mismatch.Message;
+                    RuntimeDiagnostics.Initialize(allocateWorkerSlot: false);
+                    RegisterDiagnosticsPanel();
+                    try { Log.Info("ServiceCoverageFix " + _compatibilityInactiveReason); } catch { }
+                    return;
+                }
+#if SCF_BETA
+                var coverageUpdate = AccessTools.Method(CompatibilityGate.ServiceCoverageSystemType, "OnUpdate");
+                BetaRuntime.RejectExistingCoverageOwner(Harmony.GetPatchInfo(coverageUpdate)?.Owners);
+#endif
+                ApplyCoverageScheduleBridge.ValidateBridge(CompatibilityGate.ApplyCoverageJobType);
+                RuntimeDiagnostics.Initialize();
 
                 _harmony = new Harmony(HarmonyId);
-                _harmony.PatchAll(Assembly.GetExecutingAssembly());
+                ServiceCoverageSystemPatch.Reset();
+                _harmony.CreateClassProcessor(typeof(ServiceCoverageSystemPatch)).Patch();
 
                 if (ServiceCoverageSystemPatch.ReplacementCount != 1)
                 {
@@ -33,42 +76,148 @@ namespace ServiceCoverageFix
                         $"Expected one ApplyCoverageJob schedule replacement, found {ServiceCoverageSystemPatch.ReplacementCount}.");
                 }
 
-                System.Version harmonyVersion = typeof(Harmony).Assembly.GetName().Version;
-                System.Version modVersion = Assembly.GetExecutingAssembly().GetName().Version;
-                if (CompatibilityGate.IsUnverifiedGameBuild)
-                {
-                    // A new game hash is diagnostic information, not a load failure.
-                    // Structural validation and the schedule replacement have succeeded.
-                    Log.Info(
-                        "Game build differs from the verified baseline; structural " +
-                        "and scheduling checks passed. " +
-                        $"Game.dll SHA-256: {CompatibilityGate.ActualGameSha256}");
-                }
-
-                Log.Info(
-                    $"Enabled ServiceCoverageFix {modVersion} record-local byte-radix hardened build " +
-                    $"with packaged Harmony {harmonyVersion}.");
+                RuntimeDiagnostics.MarkInstalled();
+                TryInstallPreview(_harmony, CompatibilityGate.PreviewSupported);
             }
             catch (Exception exception)
             {
-                try
-                {
-                    _harmony?.UnpatchAll(HarmonyId);
-                }
-                catch
-                {
-                    // Preserve the original failure in the log below.
-                }
-
-                _harmony = null;
-                Log.Error($"The stutter fix was disabled without changing simulation behavior: {exception}");
+                AbortLoad(exception);
+                return;
             }
+
+            try { TrackGameLoads(Game.SceneFlow.GameManager.instance); }
+            catch (Exception error) { try { Log.Info($"Workload history follows mod lifetime: {error.Message}"); } catch { } }
+
+#if SCF_BETA
+            try { _beta = new BetaRuntime(CompatibilityGate.ActualGameSha256); }
+            catch (Exception error) { try { Log.Info("Optional workers unavailable: " + error.Message); } catch { } }
+#endif
+            RegisterDiagnosticsPanel();
+
+            try
+            {
+                System.Version? version = Assembly.GetExecutingAssembly().GetName().Version;
+                Log.Info($"Installed ServiceCoverageFix {version}. Coverage contract and bridge preflight passed.");
+            }
+            catch { /* Logging cannot change an installed patch. */ }
+        }
+
+        private void RegisterDiagnosticsPanel()
+        {
+            try
+            {
+#if SCF_BETA
+                // ModSetting registers each new instance by id. Construct the live UI object last.
+                var defaults = new ServiceCoverageStutterFixSettings(this);
+                _settings = new ServiceCoverageStutterFixSettings(this);
+                try { Colossal.IO.AssetDatabase.AssetDatabase.global.LoadSettings("ServiceCoverageFix", _settings, defaults); }
+                catch (Exception error) { try { Log.Info("Beta settings unavailable: " + error.Message); } catch { } }
+                _settings.BindBeta(this);
+#else
+                _settings = new DiagnosticSettings(this);
+#endif
+                _diagnosticLocale = new DiagnosticLocale(_settings);
+                Game.SceneFlow.GameManager.instance.localizationManager.AddSource("en-US", _diagnosticLocale);
+                _settings.RegisterInOptionsUI();
+            }
+            catch (Exception uiError)
+            {
+                try { Log.Info($"Diagnostics panel unavailable: {uiError.Message}"); } catch { }
+            }
+        }
+
+        internal void TrackGameLoads(Game.SceneFlow.GameManager source)
+        {
+            // Keep the optional event API out of the unload method. A JIT can
+            // resolve a missing accessor before reaching a null guard.
+            Action unsubscribe = () => source.onGameLoadingComplete -= OnGameLoadingComplete;
+            source.onGameLoadingComplete += OnGameLoadingComplete;
+            _stopTrackingGameLoads = unsubscribe;
+        }
+
+        private void OnGameLoadingComplete(Colossal.Serialization.Entities.Purpose purpose, GameMode mode) =>
+            RuntimeDiagnostics.StartLoadedSession(this);
+
+        internal static void TryInstallPreview(Harmony harmony, bool supported)
+        {
+            ServiceCoveragePreviewPatch.Reset();
+            if (!supported) return;
+            // A preview transpiler or Harmony failure leaves simulation active.
+            try
+            {
+                harmony.CreateClassProcessor(typeof(ServiceCoveragePreviewPatch)).Patch();
+                if (ServiceCoveragePreviewPatch.ReplacementCount != 1)
+                    throw new InvalidOperationException("Expected one preview ApplyCoverageJob schedule replacement.");
+                RuntimeDiagnostics.MarkPreviewInstalled();
+            }
+            catch (Exception error)
+            {
+                try { Log.Info($"Coverage preview remains on vanilla: {error.Message}"); } catch { }
+            }
+        }
+
+        private void AbortLoad(Exception exception)
+        {
+            // Preserve all handles until their own cleanup succeeds. A surviving
+            // Harmony patch routes new submissions to vanilla after disposal.
+            try { OnDispose(); }
+            catch (Exception cleanup) { try { Log.Error(cleanup); } catch { } }
+            try
+            {
+                Log.Error($"ServiceCoverageFix could not initialize. {exception}");
+            }
+            catch { /* Reporting cannot interrupt cleanup. */ }
         }
 
         public void OnDispose()
         {
-            _harmony?.UnpatchAll(HarmonyId);
-            _harmony = null;
+            if (!IsOwner) return;
+            List<Exception>? failures = null;
+#if SCF_BETA
+            AttemptCleanup(() => { _beta?.Dispose(); _beta = null; }, ref failures);
+#endif
+            AttemptCleanup(() =>
+            {
+                _stopTrackingGameLoads?.Invoke();
+                _stopTrackingGameLoads = null;
+            }, ref failures);
+            AttemptCleanup(() =>
+            {
+                _settings?.UnregisterInOptionsUI();
+                _settings = null;
+            }, ref failures);
+            AttemptCleanup(() =>
+            {
+                if (_diagnosticLocale != null)
+                    Game.SceneFlow.GameManager.instance.localizationManager.RemoveSource("en-US", _diagnosticLocale);
+                _diagnosticLocale = null;
+            }, ref failures);
+            AttemptCleanup(() =>
+            {
+                _harmony?.UnpatchAll(HarmonyId);
+                _harmony = null;
+            }, ref failures);
+
+            // Always disable new optimized submissions and finish tracked work,
+            // even if UI cleanup or unpatching failed. Dispose retains counter
+            // memory when completion fails, so workers never lose their buffer.
+            AttemptCleanup(RuntimeDiagnostics.Dispose, ref failures);
+
+            if (failures != null)
+                throw new AggregateException("ServiceCoverageFix cleanup did not fully complete.", failures);
+            Interlocked.CompareExchange(ref _owner, null, this);
+        }
+
+        private static void AttemptCleanup(Action cleanup, ref List<Exception>? failures)
+        {
+            try { cleanup(); }
+            catch (Exception exception)
+            {
+                // Preserve every failure and retain the corresponding resource
+                // reference, allowing a later OnDispose call to retry cleanup.
+                if (failures == null) failures = new List<Exception>();
+                failures.Add(exception);
+            }
         }
     }
 
@@ -76,6 +225,9 @@ namespace ServiceCoverageFix
     {
         internal const string ExpectedGameSha256 =
             "721e7e17bf74299aa2b988c1bd07e90874bb8bc72d263229500c4bf639e7e4ee";
+
+        private const string SecondReviewedGameSha256 =
+            "f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745";
 
         internal const string ServiceCoverageSystemName =
             "Game.Simulation.ServiceCoverageSystem";
@@ -85,16 +237,20 @@ namespace ServiceCoverageFix
 
         internal static Type ServiceCoverageSystemType { get; private set; } = null!;
 
-        internal static bool IsUnverifiedGameBuild { get; private set; }
+        internal static Type ApplyCoverageJobType { get; private set; } = null!;
+        internal static bool PreviewSupported { get; private set; }
+        internal static Type? CoveragePreviewSystemType { get; private set; }
 
         internal static string ActualGameSha256 { get; private set; } = string.Empty;
+        internal static bool IsUnverifiedGameBuild => ActualGameSha256 != ExpectedGameSha256 &&
+            ActualGameSha256 != SecondReviewedGameSha256;
 
         internal static void Validate()
         {
-            Type? systemType = AccessTools.TypeByName(ServiceCoverageSystemName);
+            Type? systemType = typeof(UpdateSystem).Assembly.GetType(ServiceCoverageSystemName);
             if (systemType == null)
             {
-                throw new TypeLoadException(ServiceCoverageSystemName);
+                throw new CoverageContractMismatch(ServiceCoverageSystemName + " is missing.");
             }
 
             string assemblyPath = systemType.Assembly.Location;
@@ -103,29 +259,38 @@ namespace ServiceCoverageFix
                 throw new FileNotFoundException("Could not locate the loaded Game.dll.", assemblyPath);
             }
 
-            string actualHash;
+            // Both released fixtures have the same reviewed simulation and preview
+            // contracts. Stream their hash first to avoid the much larger metadata
+            // allocation on these builds. Other hashes still use the behavior gate.
             using (FileStream stream = File.OpenRead(assemblyPath))
             using (SHA256 sha256 = SHA256.Create())
-            {
-                actualHash = ToLowerHex(sha256.ComputeHash(stream));
-            }
+                ActualGameSha256 = ToLowerHex(sha256.ComputeHash(stream));
 
-            ActualGameSha256 = actualHash;
-            IsUnverifiedGameBuild = !string.Equals(
-                actualHash,
-                ExpectedGameSha256,
-                StringComparison.Ordinal);
+            bool compatiblePreview = !IsUnverifiedGameBuild || CoverageContract.Validate(assemblyPath);
+            CoveragePreviewSystemType = systemType.Assembly.GetType("Game.Tools.CoveragePreviewSystem");
+            PreviewSupported = compatiblePreview && CoveragePreviewSystemType != null;
 
             Type? jobType = systemType.GetNestedType(
                 "ApplyCoverageJob",
                 BindingFlags.Public | BindingFlags.NonPublic);
             if (jobType == null || jobType.FullName != ApplyCoverageJobName)
             {
-                throw new TypeLoadException(ApplyCoverageJobName);
+                throw new CoverageContractMismatch(ApplyCoverageJobName);
             }
 
             ValidateNativeListField(jobType, "m_BuildingData", "BuildingData", 24);
             ValidateNativeListField(jobType, "m_Elements", "CoverageElement", 32);
+            if (jobType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Length != 2)
+                throw new CoverageContractMismatch("Unexpected fields in the game's ApplyCoverageJob.");
+            if (!typeof(Unity.Jobs.IJob).IsAssignableFrom(jobType) || !jobType.IsValueType)
+                throw new CoverageContractMismatch("ApplyCoverageJob must remain an IJob value type.");
+            Type coverageType = systemType.Assembly.GetType("Game.Net.ServiceCoverage")
+                ?? throw new CoverageContractMismatch("Game.Net.ServiceCoverage");
+            ValidateLayout(coverageType, new[] { "m_Coverage" },
+                new[] { "Unity.Mathematics.float2" }, new[] { 0 });
+            if (Marshal.SizeOf(coverageType) != 8)
+                throw new CoverageContractMismatch("Unexpected size for ServiceCoverage.");
+            ApplyCoverageJobType = jobType;
             ServiceCoverageSystemType = systemType;
         }
 
@@ -137,23 +302,49 @@ namespace ServiceCoverageFix
         {
             FieldInfo? field = jobType.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             if (field == null || !field.FieldType.IsGenericType ||
-                field.FieldType.GetGenericTypeDefinition().FullName != "Unity.Collections.NativeList`1")
+                field.FieldType.GetGenericTypeDefinition() != typeof(Unity.Collections.NativeList<>))
             {
-                throw new MissingFieldException(jobType.FullName, fieldName);
+                throw new CoverageContractMismatch("Unexpected field " + jobType.FullName + "." + fieldName);
             }
 
             Type elementType = field.FieldType.GetGenericArguments()[0];
             if (elementType.Name != expectedElementName)
             {
-                throw new InvalidOperationException(
+                throw new CoverageContractMismatch(
                     $"{fieldName} has unexpected element type {elementType.FullName}.");
             }
+
+            if (expectedElementName == "BuildingData")
+                ValidateLayout(elementType,
+                    new[] { "m_Entity", "m_ElementIndex", "m_ElementCount", "m_Total", "m_Remaining" },
+                    new[] { "Unity.Entities.Entity", "System.Int32", "System.Int32", "System.Single", "System.Single" },
+                    new[] { 0, 8, 12, 16, 20 });
+            else
+                ValidateLayout(elementType,
+                    new[] { "m_CoveragePtr", "m_Coverage", "m_AverageCoverage", "m_DensityFactor", "m_LengthFactor" },
+                    new[] { "System.Void*", "Unity.Mathematics.float2", "System.Single", "System.Single", "System.Single" },
+                    new[] { 0, 8, 16, 20, 24 });
 
             int actualSize = System.Runtime.InteropServices.Marshal.SizeOf(elementType);
             if (actualSize != expectedElementSize)
             {
-                throw new InvalidOperationException(
+                throw new CoverageContractMismatch(
                     $"{elementType.FullName} is {actualSize} bytes; expected {expectedElementSize}.");
+            }
+        }
+
+        private static void ValidateLayout(Type type, string[] names, string[] types, int[] offsets)
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            if (!type.IsValueType || (!type.IsLayoutSequential && !type.IsExplicitLayout) ||
+                type.GetFields(flags).Length != names.Length)
+                throw new CoverageContractMismatch($"Unexpected layout for {type.FullName}.");
+            for (int i = 0; i < names.Length; i++)
+            {
+                FieldInfo? field = type.GetField(names[i], flags);
+                if (field == null || field.FieldType.FullName != types[i] ||
+                    Marshal.OffsetOf(type, names[i]).ToInt64() != offsets[i])
+                    throw new CoverageContractMismatch($"Unexpected type or offset for {type.FullName}.{names[i]}.");
             }
         }
 
@@ -171,3 +362,4 @@ namespace ServiceCoverageFix
         }
     }
 }
+

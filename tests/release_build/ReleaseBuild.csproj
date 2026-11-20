@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><OutputType>Exe</OutputType><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../game_contract/HarmonyEmission.cs" Link="HarmonyEmission.cs" />
+    <Compile Include="../game_contract/Reader.cs" Link="Reader.cs" />
+    <Reference Include="0Harmony"><HintPath>$(HarmonyPath)</HintPath></Reference>
+  </ItemGroup>
+</Project>
