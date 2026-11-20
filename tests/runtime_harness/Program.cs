@@ -68,5 +68,6 @@ internal static class Program
         RuntimeDiagnostics.Dispose();
         Check(AllocationTracker.Live==0,"Reload leaked native memory");
         Console.WriteLine("PASS: bridge probes (0/1/2 providers), bad fields, pending execution, managed detection, repeated fallback, single scheduling, unload completion, reload, allocation lifetime.");
+        FailurePathTests.Run();
     }
 }

@@ -9,6 +9,8 @@
     <Compile Include="../../src/OptimizedApplyCoverageJob.cs" Link="OptimizedApplyCoverageJob.cs" />
     <Compile Include="../../src/RuntimeDiagnostics.cs" Link="RuntimeDiagnostics.cs" />
     <Compile Include="../../src/ServiceCoverageSystemPatch.cs" Link="ServiceCoverageSystemPatch.cs" />
+    <Compile Include="../../src/Mod.cs" Link="Mod.cs" />
+    <Compile Include="../../src/DiagnosticSettings.cs" Link="DiagnosticSettings.cs" />
     <Reference Include="Unity.Mathematics"><HintPath>$(GameManagedPath)/Unity.Mathematics.dll</HintPath></Reference>
   </ItemGroup>
   <Target Name="RequireGameMath" BeforeTargets="ResolveReferences">

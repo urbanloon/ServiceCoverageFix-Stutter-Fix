@@ -158,13 +158,22 @@ namespace ServiceCoverageFix
             }
             catch (Exception exception)
             {
-                RuntimeDiagnostics.RecordFallback(exception);
-                if (Interlocked.Exchange(ref _fallbackLogged, 1) == 0)
+                // Reporting is best-effort. Even exception formatting or the
+                // logger itself may throw; neither may prevent vanilla work.
+                try { RuntimeDiagnostics.RecordFallback(exception); }
+                catch { /* Keep the original scheduling path available. */ }
+                try
                 {
-                    Mod.Log.Error(
-                        $"Could not construct the optimized job; retaining the game's original job: {exception}");
+                    if (Interlocked.Exchange(ref _fallbackLogged, 1) == 0)
+                    {
+                        Mod.Log.Error(
+                            $"Could not construct the optimized job; retaining the game's original job: {exception}");
+                    }
                 }
+                catch { /* Logging cannot suppress the fallback. */ }
 
+                // Deliberately outside the reporting guards: a failure in the
+                // original scheduler must still propagate to the game.
                 return IJobExtensions.Schedule(originalJob, dependency);
             }
         }

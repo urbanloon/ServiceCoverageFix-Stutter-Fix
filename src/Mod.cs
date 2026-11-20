@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -53,8 +54,8 @@ namespace ServiceCoverageFix
                 }
                 catch (Exception uiError) { Log.Info($"Diagnostics panel unavailable: {uiError.Message}"); }
 
-                System.Version harmonyVersion = typeof(Harmony).Assembly.GetName().Version;
-                System.Version modVersion = Assembly.GetExecutingAssembly().GetName().Version;
+                System.Version? harmonyVersion = typeof(Harmony).Assembly.GetName().Version;
+                System.Version? modVersion = Assembly.GetExecutingAssembly().GetName().Version;
                 if (CompatibilityGate.IsUnverifiedGameBuild)
                 {
                     // A new game hash is diagnostic information, not a load failure.
@@ -89,19 +90,42 @@ namespace ServiceCoverageFix
 
         public void OnDispose()
         {
-            try
+            List<Exception>? failures = null;
+            AttemptCleanup(() =>
             {
                 _settings?.UnregisterInOptionsUI();
+                _settings = null;
+            }, ref failures);
+            AttemptCleanup(() =>
+            {
                 if (_diagnosticLocale != null)
                     Game.SceneFlow.GameManager.instance.localizationManager.RemoveSource("en-US", _diagnosticLocale);
-            }
-            finally
-            {
-                _settings = null;
                 _diagnosticLocale = null;
+            }, ref failures);
+            AttemptCleanup(() =>
+            {
                 _harmony?.UnpatchAll(HarmonyId);
                 _harmony = null;
-                RuntimeDiagnostics.Dispose();
+            }, ref failures);
+
+            // Always disable new optimized submissions and finish tracked work,
+            // even if UI cleanup or unpatching failed. Dispose retains counter
+            // memory when completion fails, so workers never lose their buffer.
+            AttemptCleanup(RuntimeDiagnostics.Dispose, ref failures);
+
+            if (failures != null)
+                throw new AggregateException("ServiceCoverageFix cleanup did not fully complete.", failures);
+        }
+
+        private static void AttemptCleanup(Action cleanup, ref List<Exception>? failures)
+        {
+            try { cleanup(); }
+            catch (Exception exception)
+            {
+                // Preserve every failure and retain the corresponding resource
+                // reference, allowing a later OnDispose call to retry cleanup.
+                if (failures == null) failures = new List<Exception>();
+                failures.Add(exception);
             }
         }
     }
