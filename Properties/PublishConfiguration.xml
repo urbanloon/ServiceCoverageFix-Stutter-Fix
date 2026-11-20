@@ -6,9 +6,7 @@
 	<DisplayName Value="Service Coverage Stutter Fix" />
 	<ShortDescription Value="Fixes periodic service-coverage stutters without changing coverage results." />
 
-	<LongDescription>
-## As of the latest patch, 1.6.2f1, the mod still works and is still needed to solve service coverage related stutter.
-
+	<LongDescription><![CDATA[
 Some cities experience a severe, rhythmic CPU stall while the simulation is running. At 1× speed, the hitch repeats approximately every 4.4 seconds and can freeze the game for 74–97 milliseconds. At higher simulation speeds, the same service-coverage workload runs more frequently.
 
 **ETW tracing and native-code analysis identified the hotspot as:**
@@ -58,7 +56,7 @@ The largest improvement is in frame-time consistency. The severe periodic drop r
 **Disclaimer:** I was going to keep this unlisted, but after a few people reached out facing a similar problem, I've decided to make it public. I've tested this mod for over 24 hours, saved, removed the mod, loaded the city again, simulated, reactivated the mod, loaded the city and simulated. I've done my best to make sure this is extremely stable and effective, but I have my own limitations. I really just wanted to be able to make videos on my cities again.
 
 P.S. If you're curious about the computer-science idea behind why changing an algorithm can produce a huge performance increase, [this Veritasium video is a great intro](https://www.youtube.com/watch?v=kS-CGkiPetQ). It discusses Dijkstra and priority-based processing. This mod does not use Dijkstra, but it exploits a related property: its next coverage priority can only move in one direction, which lets it use a monotone radix queue instead of the game's repeatedly shifted sorted array (stutter producing method).
-	</LongDescription>
+]]></LongDescription>
 
 	<!-- Thumbnail -->
 	<Thumbnail Value="Properties/Thumbnail.png" />
