@@ -4,23 +4,19 @@ Service Coverage Stutter Fix reduces a recurring simulation hitch in Cities: Sky
 
 [Service Coverage Stutter Fix on Paradox Mods](https://mods.paradoxplaza.com/mods/157236/Windows)
 
-## Version 0.4.1
+## Version 0.4.2
 
-The service-coverage fix runs by default and carries over from 0.3.6. Five other optimizations are available under **Options → Service Coverage Stutter Fix → Beta options**. Each starts off and can be enabled independently.
+This hotfix restores vanilla housing and resource-seller searches after reports of simulation errors. The fix applies even if you enabled those options in 0.4.0 or 0.4.1. Restart the game after updating.
+
+Service coverage runs by default. **Options → Service Coverage Stutter Fix → Diagnostics** shows coverage status and the latest workload for each service, including participating providers and available and processed coverage elements.
 
 | Beta option | What it speeds up |
 |---|---|
-| Water flow | Picks the next pipe junction to check more efficiently while calculating water and sewage flow on branching networks. |
-| Resource-seller search | Reuses a resource's market price while a buyer compares eligible sellers in the same group. |
-| Route search | Speeds up selecting the next step when thousands of candidates are queued in a large route search. |
-| Housing search | Checks the same homes and shelters with vanilla rent limits and scoring. Reuses household income and support information within a group of homes. |
-| Company property search | Reuses building occupancy checks while commercial and industrial businesses compare premises. The same companies compete for the same listings under vanilla rules. |
+| Water flow | Water and sewage calculations on branching pipe networks. |
+| Route search | Selecting the next step in large route searches. |
+| Company property search | Checking occupancy while businesses compare properties. |
 
-**These beta options may be incompatible with Big City Performance.**
-
-**Beta worker status** shows which optional workers are available. The separate **Diagnostics** tab shows whether optimized coverage has run and reports the last completed workload by service. For parks, it shows how many providers participated, how many coverage elements were available, and how many the worker processed.
-
-The five betas matched vanilla outputs in offline comparisons on the reviewed game build. In one industrial search modeled on 2,631 businesses and 122 listings, the company worker took 1.22 ms with the beta enabled and 8.72 ms with it off. City-wide FPS has not been measured for these options. The mod adds no data to city saves.
+All three options start off. These beta options may be incompatible with Big City Performance.
 
 ## Build
 

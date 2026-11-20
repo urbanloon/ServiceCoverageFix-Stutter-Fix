@@ -53,22 +53,31 @@ RecordingWriter Render(string name)
 void Expect(string property, string pattern)
 {
     var output = Render(property).Strings;
-    if (!output.Any(s => s.Contains(pattern)))
+    if (!output.Contains(pattern))
         throw new Exception($"{property} widget did not serialize '{pattern}'. Observed {string.Join(" | ", output)}");
 }
+var switches = new Dictionary<string, string>
+{
+    { "WaterFlow", "Water flow" },
+    { "RouteSearch", "Route search" },
+    { "CompanyPropertySearch", "Company property search" }
+};
+var expected = new HashSet<string> { "ExecutionStatus", "WorkloadByService", "BetaCompatibility" };
+expected.UnionWith(switches.Keys);
+if (!expected.SetEquals(widgets.Keys))
+    throw new Exception("Unexpected options menu: " + string.Join(", ", widgets.Keys));
+if (widgets.Values.Count(w => w.GetType().FullName == "Game.UI.Widgets.ToggleField") != 3)
+    throw new Exception("Expected exactly three toggle widgets.");
+
 Expect("ExecutionStatus", "Inactive");
 modType.GetField("_owner", all)!.SetValue(null, owner);
 modType.GetField("_compatibilityInactiveReason", all)!.SetValue(owner, "Inactive. Widget fixture contract mismatch.");
-Expect("ExecutionStatus", "Inactive. Widget fixture contract mismatch.");
-Expect("WorkloadByService", "Simulation replacement inactive");
+Expect("ExecutionStatus", "Inactive on this game version");
+Expect("WorkloadByService", "No workloads recorded.");
 modType.GetField("_compatibilityInactiveReason", all)!.SetValue(owner, null);
-Expect("ExecutionCounts", "scheduled=0");
-Expect("PreviewExecutionCounts", "Inactive");
-Expect("PreviewWorkloadByService", "Preview replacement inactive");
-Expect("WorkloadByService", "Park — Awaiting a completed pass");
 diagnostic.GetMethod("MarkInstalled", all)!.Invoke(null, null);
-diagnostic.GetMethod("MarkPreviewInstalled", all)!.Invoke(null, null);
-Expect("ExecutionStatus", "Awaiting coverage update");
+Expect("ExecutionStatus", "Waiting for a coverage update");
+Expect("WorkloadByService", "Latest workloads" + Environment.NewLine + "No workloads recorded.");
 diagnostic.GetMethod("StartLoadedSession", all)!.Invoke(null, new[] {owner});
 // Seed one known completed sample in the managed history. Worker publication
 // and overlapping schedules are exercised separately by the runtime harness.
@@ -82,57 +91,44 @@ sample.GetType().GetField("Submission", all)!.SetValue(sample, 4L);
 sample.GetType().GetField("Workload", all)!.SetValue(sample, counts);
 int park = Convert.ToInt32(Enum.Parse(game.GetType("Game.Net.CoverageService", true)!, "Park"));
 latest.SetValue(sample, park);
-Expect("WorkloadByService", "Since the last completed game load");
-Expect("WorkloadByService", "Park — pass 4, 2 providers, 12 available, 7 processed, 18 reserved");
-Expect("PreviewWorkloadByService", "Latest tool and infoview preview workloads");
-diagnostic.GetMethod("RecordFallback", all)!.Invoke(null, new object[] {new Exception("simulation-widget-test"), false});
+simulation.GetType().GetField("ReleasedCompleted", all)!.SetValue(simulation, 1L);
+Expect("ExecutionStatus", "Active");
+Expect("WorkloadByService", "Latest workloads" + Environment.NewLine + "Park — 2 providers, 12 available, 7 processed");
 diagnostic.GetMethod("RecordFallback", all)!.Invoke(null, new object[] {new Exception("preview-widget-test"), true});
-Expect("ExecutionCounts", "Fallback observed");
-Expect("PreviewExecutionCounts", "fallbacks=1");
-Expect("LastFailure", "simulation-widget-test");
-Expect("PreviewLastFailure", "preview-widget-test");
-var switches = new[] {"WaterFlow", "ResourceSellerSearch", "RouteSearch", "HousingSearch", "CompanyPropertySearch"};
-if (widgets.ContainsKey("BetaStatus"))
+Expect("ExecutionStatus", "Active");
+diagnostic.GetMethod("RecordFallback", all)!.Invoke(null, new object[] {new Exception("simulation-widget-test"), false});
+Expect("ExecutionStatus", "A coverage update used the game's calculation");
+Expect("BetaCompatibility", "These beta options may be incompatible with Big City Performance.");
+foreach (var (key, label) in switches)
 {
-    Expect("BetaStatus", "Off");
-    Expect("BetaCompatibility", "These beta options may be incompatible with Big City Performance.");
-    foreach (var key in switches)
-    {
-        var widget = Render(key);
-        if (widget.Booleans["value"]) throw new Exception(key + " should default to off");
-        var requiredIds = new[] {"Options.OPTION[", "Options.OPTION_DESCRIPTION["};
-        foreach (var id in requiredIds)
-            if (!widget.Strings.Any(text => text.StartsWith(id) && labels.TryGetValue(text, out var value) && value.Length > 0))
-                throw new Exception($"Missing localized widget text for {key}: {id}");
-    }
-    for (int mask = 0; mask < 1 << switches.Length; mask++)
-    {
-        for (int index = 0; index < switches.Length; index++)
-        {
-            var key = switches[index];
-            if (widgets[key].GetType().FullName != "Game.UI.Widgets.ToggleField")
-                throw new Exception(key + " was not classified as a toggle");
-            // The game's ToggleField setter first writes through this proxy, then calls
-            // the live asset database asynchronously. This offline harness tests the
-            // setting binding and JSON frontend readback without starting that database.
-            var proxy = proxies[key];
-            proxy.GetType().GetMethod("SetValue")!.Invoke(proxy, new object[] {settings, (mask & (1 << index)) != 0});
-        }
-        for (int index = 0; index < switches.Length; index++)
-        {
-            var key = switches[index];
-            bool expected = (mask & (1 << index)) != 0;
-            if (!Equals(settingsType.GetProperty(key)!.GetValue(settings), expected) ||
-                Render(key).Booleans["value"] != expected)
-                throw new Exception($"Option {key} did not round-trip using its game widget at mask {mask}");
-        }
-    }
-    settingsType.GetMethod("SetDefaults")!.Invoke(settings, null);
-    foreach (var key in switches)
-        if (Render(key).Booleans["value"]) throw new Exception(key + " stayed on after resetting defaults");
-    Console.WriteLine("PASS: five game toggle properties and their widget JSON matched in all 32 combinations and reset to off.");
+    var widget = Render(key);
+    if (widget.Booleans["value"]) throw new Exception(key + " should default to off");
+    string? Localized(string prefix) => widget.Strings
+        .Where(text => text.StartsWith(prefix) && labels.ContainsKey(text)).Select(text => labels[text]).SingleOrDefault();
+    if (Localized("Options.OPTION[") != label || string.IsNullOrWhiteSpace(Localized("Options.OPTION_DESCRIPTION[")))
+        throw new Exception("Missing or incorrect widget text for " + key);
 }
-Console.WriteLine($"PASS: {widgets.Count} game Options widgets. Simulation and preview diagnostics serialized the expected values.");
+var names = switches.Keys.ToArray();
+for (int mask = 0; mask < 1 << names.Length; mask++)
+{
+    for (int i = 0; i < names.Length; i++)
+    {
+        // Tick the same property proxy as the game. The live asset database saves it separately.
+        var proxy = proxies[names[i]];
+        proxy.GetType().GetMethod("SetValue")!.Invoke(proxy, new object[] {settings, (mask & (1 << i)) != 0});
+    }
+    for (int i = 0; i < names.Length; i++)
+    {
+        bool enabled = (mask & (1 << i)) != 0;
+        if (!Equals(settingsType.GetProperty(names[i])!.GetValue(settings), enabled) ||
+            Render(names[i]).Booleans["value"] != enabled)
+            throw new Exception($"Widget value mismatch for {names[i]} at mask {mask}");
+    }
+}
+settingsType.GetMethod("SetDefaults")!.Invoke(settings, null);
+foreach (string key in names)
+    if (Render(key).Booleans["value"]) throw new Exception(key + " stayed on after resetting defaults");
+Console.WriteLine("PASS: six game Options widgets, three localized opt-in toggles in all eight combinations, exact compatibility text, observed status and compact service rows.");
 
 public class RecordingWriter : DispatchProxy
 {

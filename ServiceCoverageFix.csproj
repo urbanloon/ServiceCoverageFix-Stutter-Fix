@@ -6,7 +6,7 @@
     <DefineConstants>$(DefineConstants);SCF_BETA</DefineConstants>
     <AssemblyName>ServiceCoverageFix</AssemblyName>
     <RootNamespace>ServiceCoverageFix</RootNamespace>
-    <Version>0.4.1</Version>
+    <Version>0.4.2</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -19,7 +19,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="src/**/*.cs" />
+    <!-- An in-place source upgrade may leave these 0.4.1 workers on disk. -->
+    <Compile Include="src/**/*.cs" Exclude="src/Beta/HousingJob.cs;src/Beta/SellerJob.cs" />
   </ItemGroup>
 
   <!-- Imports must remain after the first PropertyGroup. -->

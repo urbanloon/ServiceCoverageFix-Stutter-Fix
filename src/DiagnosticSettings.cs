@@ -12,34 +12,15 @@ namespace ServiceCoverageFix
     {
         public DiagnosticSettings(IMod mod) : base(mod) { }
         [SettingsUISection("Diagnostics")]
-        public string ExecutionStatus => Mod.CompatibilityInactiveReason ?? RuntimeDiagnostics.SnapshotCaller(false).State;
-
-        [SettingsUISection("Diagnostics")]
-        public string ExecutionCounts => RuntimeDiagnostics.SnapshotCaller(false).ToString();
-
-        [SettingsUISection("Diagnostics")]
-        public string LastFailure => RuntimeDiagnostics.LastFailure(false);
+        public string ExecutionStatus => Mod.CompatibilityInactiveReason == null
+            ? RuntimeDiagnostics.SnapshotCaller(false).CoverageStatus : "Inactive on this game version";
 
         [SettingsUISection("Diagnostics")]
         [SettingsUIMultilineText]
         [SettingsUIDisplayName(typeof(DiagnosticSettings), nameof(SimulationWorkloadText))]
-        public string WorkloadByService => Mod.CompatibilityInactiveReason == null
-            ? RuntimeDiagnostics.FormatWorkloads() : "Simulation replacement inactive";
-
-        [SettingsUISection("Diagnostics")]
-        public string PreviewExecutionCounts => RuntimeDiagnostics.SnapshotCaller(true).ToString();
-
-        [SettingsUISection("Diagnostics")]
-        [SettingsUIMultilineText]
-        [SettingsUIDisplayName(typeof(DiagnosticSettings), nameof(PreviewWorkloadText))]
-        public string PreviewWorkloadByService => RuntimeDiagnostics.FormatWorkloads(true);
-
-        [SettingsUISection("Diagnostics")]
-        public string PreviewLastFailure => RuntimeDiagnostics.LastFailure(true);
+        public string WorkloadByService => RuntimeDiagnostics.FormatWorkloads();
 
         public LocalizedString SimulationWorkloadText() => LocalizedString.Value(WorkloadByService);
-
-        public LocalizedString PreviewWorkloadText() => LocalizedString.Value(PreviewWorkloadByService);
 
 #if SCF_BETA
         private Mod? _betaOwner;
@@ -63,24 +44,16 @@ namespace ServiceCoverageFix
         public LocalizedString BetaCompatibilityText() => LocalizedString.Value(BetaCompatibility);
 
         [SettingsUISection("Beta")]
-        public bool HousingSearch { get => _requested[(int)BetaFeature.Housing]; set => Set(BetaFeature.Housing, value); }
-        [SettingsUISection("Beta")]
-        public bool ResourceSellerSearch { get => _requested[(int)BetaFeature.Seller]; set => Set(BetaFeature.Seller, value); }
-        [SettingsUISection("Beta")]
         public bool WaterFlow { get => _requested[(int)BetaFeature.Water]; set => Set(BetaFeature.Water, value); }
         [SettingsUISection("Beta")]
         public bool RouteSearch { get => _requested[(int)BetaFeature.Route]; set => Set(BetaFeature.Route, value); }
         [SettingsUISection("Beta")]
         public bool CompanyPropertySearch { get => _requested[(int)BetaFeature.CompanyCommercial]; set => Set(BetaFeature.CompanyCommercial, value); }
-        [SettingsUISection("Beta")]
-        public string BetaStatus => string.Join(" | ", System.Array.ConvertAll(BetaFeatures.Options, f => BetaFeatures.IsCompany(f)
-            ? "Company property search (commercial: " + (_betaOwner?.BetaStatus(BetaFeature.CompanyCommercial) ?? "Off") + ", industrial: " + (_betaOwner?.BetaStatus(BetaFeature.CompanyIndustrial) ?? "Off") + ")"
-            : f + " " + (_betaOwner?.BetaStatus(f) ?? "Off")));
 #endif
         public override void SetDefaults()
         {
 #if SCF_BETA
-            HousingSearch = ResourceSellerSearch = WaterFlow = RouteSearch = CompanyPropertySearch = false;
+            WaterFlow = RouteSearch = CompanyPropertySearch = false;
 #endif
         }
     }
@@ -101,7 +74,6 @@ namespace ServiceCoverageFix
         public IEnumerable<KeyValuePair<string, string>> ReadEntries(
             IList<IDictionaryEntryError> errors, Dictionary<string, int> indexCounts)
         {
-            const string workloadHelp = "Each row shows the latest completed replacement pass for that service. The scope above the rows changes when a game load completes. Execution counters span the mod session. Pass numbers follow submission order across both callers. Providers had a usable range and budget. Available counts elements in their ranges. Processed counts elements visited, including already-covered targets. Reserved counts all input element-list entries prepared before filtering.";
             var entries = new Dictionary<string, string>
             {
                 { _settings.GetSettingsLocaleID(), "Service Coverage Stutter Fix" },
@@ -110,33 +82,17 @@ namespace ServiceCoverageFix
                 { _settings.GetOptionTabLocaleID("Beta"), "Beta options" },
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.BetaCompatibility)), "Beta compatibility" },
                 { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.BetaCompatibility)), "Compatibility with other performance mods." },
-                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.HousingSearch)), "Housing search" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.HousingSearch)), "Check the same homes and shelters using vanilla rules. Reuse household income and support checks when comparing available homes." },
-                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.ResourceSellerSearch)), "Resource-seller search" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.ResourceSellerSearch)), "Reuse resource data when businesses search for a seller." },
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.WaterFlow)), "Water flow" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.WaterFlow)), "Speed up pressure and flow calculations in water and sewage pipes." },
+                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.WaterFlow)), "Optimize water and sewage flow calculations." },
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.CompanyPropertySearch)), "Company property search" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.CompanyPropertySearch)), "Reuse renter data while commercial and industrial companies compare available properties." },
+                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.CompanyPropertySearch)), "Reuse occupancy checks when companies compare commercial or industrial properties." },
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.RouteSearch)), "Route search" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.RouteSearch)), "Speed up large route searches using the game's route costs and priorities." },
-                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.BetaStatus)), "Beta worker status" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.BetaStatus)), "Shows whether each requested worker is available in this session." },
+                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.RouteSearch)), "Optimize searches for routes across the transport network." },
 #endif
-                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.ExecutionStatus)), "Simulation execution state" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.ExecutionStatus)), "Reports observed live jobs since this mod loaded. Startup probes are excluded. Managed or fallback observations remain visible until restart." },
-                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.ExecutionCounts)), "Simulation counters" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.ExecutionCounts)), "Scheduled counts successful replacement submissions; started and completed are written by the worker. Managed counts jobs executed without Burst. Fallbacks counts submissions returned to vanilla. " + workloadHelp },
-                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.WorkloadByService)), "Latest simulation workloads" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.WorkloadByService)), workloadHelp },
-                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.PreviewExecutionCounts)), "Tool and infoview preview counters" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.PreviewExecutionCounts)), "Observed replacement submissions from the preview system. Inactive means this caller is using vanilla. Open a coverage infoview or use a relevant tool to request a preview. " + workloadHelp },
-                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.PreviewWorkloadByService)), "Latest tool and infoview preview workloads" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.PreviewWorkloadByService)), workloadHelp },
-                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.PreviewLastFailure)), "Last preview fallback error" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.PreviewLastFailure)), "The most recent preview scheduling failure, if any." },
-                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.LastFailure)), "Last simulation fallback error" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.LastFailure)), "The most recent replacement scheduling failure, if any." }
+                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.ExecutionStatus)), "Coverage status" },
+                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.ExecutionStatus)), "Shows whether the fix has processed a coverage update since the mod loaded." },
+                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.WorkloadByService)), "Latest workloads" },
+                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.WorkloadByService)), "Each service shows its latest update. Providers are participating buildings. Available and processed count coverage elements." }
             };
 #if SCF_BETA
             // The game's option IDs include the concrete settings class name. Keep

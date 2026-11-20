@@ -14,7 +14,7 @@
     <PropertyGroup>
       <_ScfGameFile>@(_ScfGame->'%(FullPath)')</_ScfGameFile>
       <_ScfManaged>$([System.IO.Path]::GetDirectoryName('$(_ScfGameFile)'))</_ScfManaged>
-      <_ScfGenArtifacts>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'generator-tool'))</_ScfGenArtifacts>
+      <_ScfGenArtifacts>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'generator-tool', '$(Version)'))</_ScfGenArtifacts>
       <_ScfGenOutput>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'generated-workers'))</_ScfGenOutput>
     </PropertyGroup>
     <Exec Command="dotnet build &quot;$(_ScfGenerator)&quot; --artifacts-path &quot;$(_ScfGenArtifacts)&quot; -c Release --nologo -p:DecompilerDir=&quot;$(DecompilerDir)&quot;" />

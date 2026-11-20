@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using Game.Net;
 using Unity.Collections;
@@ -44,6 +45,10 @@ namespace ServiceCoverageFix
             ManagedExecutions != 0 ? ManagedState :
             Completed != 0 ? BurstState :
             Scheduled != 0 ? "Awaiting execution" : "Awaiting coverage update";
+        internal string CoverageStatus => !Installed ? "Inactive" :
+            Fallbacks != 0 ? "A coverage update used the game's calculation" :
+            Completed != 0 ? "Active" : "Waiting for a coverage update";
+
         private string? _text;
         public override string ToString() => _text ??=
             $"{State}; scheduled={Scheduled}, started={Started}, completed={Completed}, " +
@@ -95,7 +100,6 @@ namespace ServiceCoverageFix
         private static bool _installed;
         private static long _scheduled;
         private static long _workloadCutoff;
-        private static bool _observedLoad;
         private static long _fallbacks;
         private static string _lastFailure = string.Empty;
         private static string _lastReportedState = string.Empty;
@@ -111,7 +115,6 @@ namespace ServiceCoverageFix
                 if (allocateWorkerSlot) AllocateSlot(false);
                 _scheduled = _fallbacks = _workloadCutoff = 0;
                 _totalStatus = null;
-                _observedLoad = false;
                 _installed = _previewInstalled = false;
                 _lastFailure = _lastReportedState = string.Empty;
             }
@@ -125,7 +128,6 @@ namespace ServiceCoverageFix
                 // Submissions through this boundary belong to the previous
                 // display session, even when a worker publishes afterward.
                 _workloadCutoff = _scheduled;
-                _observedLoad = true;
                 Array.Clear(_simulation.Latest, 0, _simulation.Latest.Length);
                 Array.Clear(_preview.Latest, 0, _preview.Latest.Length);
                 _simulation.TextVersion++;
@@ -238,13 +240,12 @@ namespace ServiceCoverageFix
             Sample[] samples;
             CallerHistory history;
             long version;
-            bool observedLoad;
             KeyValuePair<byte, string>[] labels;
             lock (Sync)
             {
-                if (preview && !_previewInstalled) return "Preview replacement inactive";
+                if (!_installed || (preview && !_previewInstalled)) return "No workloads recorded.";
                 if (!preview && ServiceCoverageSystemPatch.ServiceBindingAvailable == false)
-                    return "Simulation service categories are unavailable for this game or patch layout.";
+                    return "Service workloads are unavailable on this game version.";
                 history = preview ? _preview : _simulation;
                 foreach (PassSlot slot in Slots)
                     if (slot.Preview == preview) ObserveWorkload(slot);
@@ -253,43 +254,37 @@ namespace ServiceCoverageFix
                 samples = new Sample[labels.Length];
                 for (int i = 0; i < samples.Length; i++) samples[i] = history.Latest[labels[i].Key];
                 version = history.TextVersion;
-                observedLoad = _observedLoad;
             }
 
             // Format a managed copy. Rendering a newly completed pass does not
             // hold the scheduling lock while formatting every service and number.
-            string[] lines = new string[samples.Length + 2];
-            lines[0] = preview ? "Latest tool and infoview preview workloads" : "Latest simulation workloads";
-            lines[1] = observedLoad ? "Since the last completed game load" : "Since mod load";
+            var rows = new StringBuilder("Latest workloads");
+            bool hasWorkload = false;
             for (int i = 0; i < samples.Length; i++)
-                lines[i + 2] = samples[i].Row ?? FormatRow(labels[i].Value, samples[i]);
-
-            string result = string.Join(Environment.NewLine, lines);
+            {
+                if (samples[i].Submission == 0) continue;
+                samples[i].Row ??= FormatRow(labels[i].Value, samples[i].Workload);
+                rows.AppendLine().Append(samples[i].Row);
+                hasWorkload = true;
+            }
+            if (!hasWorkload) rows.AppendLine().Append("No workloads recorded.");
+            string result = rows.ToString();
             lock (Sync)
             {
                 if (version == history.TextVersion)
                 {
                     for (int i = 0; i < samples.Length; i++)
-                        history.Latest[labels[i].Key].Row = lines[i + 2];
+                        history.Latest[labels[i].Key].Row = samples[i].Row;
                     history.Text = result;
                 }
             }
             return result;
         }
 
-        private static string FormatRow(string name, Sample sample)
-        {
-            if (sample.Submission == 0) return name + " — Awaiting a completed pass";
-            WorkloadCounts c = sample.Workload;
-            return string.Format("{0} — pass {1:N0}, {2:N0} {3}, {4:N0} available, {5:N0} processed, {6:N0} reserved",
-                name, sample.Submission, c.Providers, c.Providers == 1 ? "provider" : "providers",
-                c.Available, c.Processed, c.Reserved);
-        }
-
-        internal static string LastFailure(bool preview)
-        {
-            lock (Sync) return (preview ? _preview : _simulation).LastFailure;
-        }
+        private static string FormatRow(string name, WorkloadCounts counts) =>
+            string.Format("{0} — {1:N0} {2}, {3:N0} available, {4:N0} processed",
+                name, counts.Providers, counts.Providers == 1 ? "provider" : "providers",
+                counts.Available, counts.Processed);
 
         internal static void RecordFallback(Exception error, bool preview = false)
         {
@@ -354,7 +349,7 @@ namespace ServiceCoverageFix
                 lock (Sync)
                 {
                     // Once Burst has run, only a managed job or a fallback can
-                    // change the log state. The complete counters stay live in Options.
+                    // change the log state. Diagnostic tools can still read the complete counters.
                     if (_installed)
                     {
                         if (_fallbacks != 0 && _lastReportedState == CoverageRuntimeStatus.FallbackState) return;

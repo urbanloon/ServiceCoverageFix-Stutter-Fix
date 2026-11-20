@@ -45,7 +45,7 @@ try
         const string companyProjection = "ce477b748c8e83cf700dd53f9663f29640f89b1a23873e3e71198b24f7176119";
         if (!Convert.ToHexString(SHA256.HashData(company)).Equals(companyProjection, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Generated company source does not match the verified November projection.");
-        foreach (string feature in new[] { "Housing", "Seller", "Route", "Water", "Company" }) marks.Add(feature, "v1");
+        foreach (string feature in new[] { "Route", "Water", "Company" }) marks.Add(feature, "v1");
     }
     else
     {

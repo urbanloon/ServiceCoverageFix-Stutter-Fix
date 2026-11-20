@@ -8,13 +8,13 @@ using Unity.Jobs;
 
 namespace ServiceCoverageFix
 {
-    internal enum BetaFeature { Housing, Seller, Water, Route, CompanyCommercial, CompanyIndustrial }
+    internal enum BetaFeature { Water, Route, CompanyCommercial, CompanyIndustrial }
 
     internal static class BetaFeatures
     {
         internal const int SiteCount = (int)BetaFeature.CompanyIndustrial + 1;
         internal static readonly BetaFeature[] Options = {
-            BetaFeature.Housing, BetaFeature.Seller, BetaFeature.Water, BetaFeature.Route, BetaFeature.CompanyCommercial
+            BetaFeature.Water, BetaFeature.Route, BetaFeature.CompanyCommercial
         };
         internal static bool IsCompany(BetaFeature site) => site == BetaFeature.CompanyCommercial || site == BetaFeature.CompanyIndustrial;
         internal static bool YieldsToLocality(BetaFeature site) => site == BetaFeature.Route || IsCompany(site);

@@ -8,11 +8,9 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading;
 using Game.Simulation;
-using Game.Pathfind;
 using HarmonyLib;
 using Unity.Burst;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Entities;
 using Unity.Jobs;
 
 namespace ServiceCoverageFix
@@ -29,19 +27,11 @@ namespace ServiceCoverageFix
         internal static bool IsUsable(BetaFeature feature) => Volatile.Read(ref Sites[(int)feature]) == 1;
         internal static MethodInfo Transpiler(BetaFeature feature) => typeof(BetaPatches).GetMethod(feature.ToString(), All)!;
 
-        internal static MethodInfo Validate(BetaFeature feature)
+        private static MethodInfo ResolveSite(BetaFeature feature, out Type source, out Type worker)
         {
-            BetaManifest.Validate(feature, CompatibilityGate.ActualGameSha256);
             string systemName, jobName, methodName;
-            Type worker;
             switch (feature)
             {
-                case BetaFeature.Housing:
-                    systemName = "Game.Simulation.CitizenPathfindSetup"; jobName = systemName + "+SetupFindHomeJob";
-                    methodName = "SetupFindHome"; worker = typeof(HousingJob); break;
-                case BetaFeature.Seller:
-                    systemName = "Game.Simulation.ResourcePathfindSetup"; jobName = systemName + "+SetupResourceSellerJob";
-                    methodName = "SetupResourceSeller"; worker = typeof(SellerJob); break;
                 case BetaFeature.Water:
                     systemName = "Game.Simulation.WaterPipeFlowSystem"; jobName = typeof(WaterPipeFlowJob).FullName;
                     methodName = "ScheduleFlowJob"; worker = typeof(OptimizedWaterFlowJob); break;
@@ -56,9 +46,15 @@ namespace ServiceCoverageFix
                 default: throw new ArgumentOutOfRangeException(nameof(feature));
             }
             var game = typeof(Game.UpdateSystem).Assembly;
-            Type source = game.GetType(jobName, true);
-            var target = game.GetType(systemName, true).GetMethods(All).Single(m => m.Name == methodName);
-            var contract = IsChunk(feature) ? typeof(IJobChunk) : typeof(IJob);
+            source = game.GetType(jobName, true);
+            return game.GetType(systemName, true).GetMethods(All).Single(m => m.Name == methodName);
+        }
+
+        internal static MethodInfo Validate(BetaFeature feature)
+        {
+            BetaManifest.Validate(feature, CompatibilityGate.ActualGameSha256);
+            var target = ResolveSite(feature, out var source, out var worker);
+            var contract = typeof(IJob);
             if (!contract.IsAssignableFrom(source) || !contract.IsAssignableFrom(worker) ||
                 worker.GetCustomAttribute<BurstCompileAttribute>() == null ||
                 !contract.CustomAttributes.Any(a => a.AttributeType.Name == "JobProducerTypeAttribute"))
@@ -87,8 +83,6 @@ namespace ServiceCoverageFix
             // The postprocessor also sees closed worker schedule calls in BetaSchedule.
             switch (feature)
             {
-                case BetaFeature.Housing: JobChunkExtensions.EarlyJobInit<HousingJob>(); break;
-                case BetaFeature.Seller: JobChunkExtensions.EarlyJobInit<SellerJob>(); break;
                 case BetaFeature.Water: IJobExtensions.EarlyJobInit<OptimizedWaterFlowJob>(); break;
                 case BetaFeature.Route: IJobExtensions.EarlyJobInit<RouteJob>(); break;
                 case BetaFeature.CompanyCommercial:
@@ -121,9 +115,6 @@ namespace ServiceCoverageFix
                         a.AttributeType.FullName == "Unity.Jobs.LowLevel.Unsafe.NativeSetThreadIndexAttribute")
             .Select(a => a.ToString()).OrderBy(a => a, StringComparer.Ordinal);
 
-        private static bool IsChunk(BetaFeature f) => f == BetaFeature.Housing || f == BetaFeature.Seller;
-        private static IEnumerable<CodeInstruction> Housing(IEnumerable<CodeInstruction> instructions) => Replace(BetaFeature.Housing, instructions);
-        private static IEnumerable<CodeInstruction> Seller(IEnumerable<CodeInstruction> instructions) => Replace(BetaFeature.Seller, instructions);
         private static IEnumerable<CodeInstruction> Water(IEnumerable<CodeInstruction> instructions) => Replace(BetaFeature.Water, instructions);
         private static IEnumerable<CodeInstruction> Route(IEnumerable<CodeInstruction> instructions) => Replace(BetaFeature.Route, instructions);
 
@@ -148,18 +139,15 @@ namespace ServiceCoverageFix
             Volatile.Write(ref OtherPublisher[(int)f], otherPublisher ? 1 : 0);
             Interlocked.Increment(ref Generations[(int)f]);
             var code = new List<CodeInstruction>(instructions);
-            bool chunk = IsChunk(f);
             Type? source = Originals[(int)f];
             var matches = code.Where(i => i.opcode == OpCodes.Call && i.operand is MethodInfo method && method.IsStatic &&
-                method.DeclaringType == (chunk ? typeof(JobChunkExtensions) : typeof(IJobExtensions)) &&
-                method.Name == (chunk ? "ScheduleParallel" : "Schedule") && method.IsGenericMethod &&
+                method.DeclaringType == typeof(IJobExtensions) && method.Name == "Schedule" && method.IsGenericMethod &&
                 method.GetGenericArguments().Length == 1 && method.GetGenericArguments()[0] == source &&
                 method.ReturnType == typeof(JobHandle) && method.GetParameters().Select(p => p.ParameterType)
-                    .SequenceEqual(chunk ? new[] {source, typeof(EntityQuery), typeof(JobHandle)} : new[] {source, typeof(JobHandle)})).ToArray();
+                    .SequenceEqual(new[] {source, typeof(JobHandle)})).ToArray();
             Volatile.Write(ref Sites[(int)f], matches.Length);
             if (matches.Length != 1) return code;
-            var adapter = typeof(BetaSchedule).GetMethod(f.ToString(), All)!;
-            matches[0].operand = chunk ? adapter.MakeGenericMethod(source!) : adapter;
+            matches[0].operand = typeof(BetaSchedule).GetMethod(f.ToString(), All)!;
             return code;
         }
     }

@@ -29,7 +29,6 @@ namespace ServiceCoverageFix
 #if SCF_BETA
         private BetaRuntime? _beta;
         internal void ChangeBeta(BetaFeature feature, bool enabled) => _beta?.Set(feature, enabled);
-        internal string BetaStatus(BetaFeature feature) => _beta?.Status(feature) ?? "Unavailable";
 #endif
         private DiagnosticSettings? _settings;
         private DiagnosticLocale? _diagnosticLocale;

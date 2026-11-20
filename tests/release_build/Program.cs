@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
@@ -15,7 +16,7 @@ AssemblyLoadContext.Default.Resolving += (context, name) => {
 };
 var game = Assembly.LoadFrom(Path.Combine(managed, "Game.dll"));
 var mod = Assembly.LoadFrom(Path.GetFullPath(args[1]));
-Require(mod.GetName().Version == new Version(0, 4, 1, 0), "release assembly version");
+Require(mod.GetName().Version == new Version(0, 4, 2, 0), "release assembly version");
 var pdb = Path.ChangeExtension(mod.Location, ".pdb");
 if (File.Exists(pdb))
 {
@@ -29,7 +30,6 @@ if (File.Exists(pdb))
         "portable PDB must match release DLL");
     Console.WriteLine($"Matching release PDB, {reader.Documents.Count} documents");
 }
-var entities = Assembly.LoadFrom(Path.Combine(managed, "Unity.Entities.dll"));
 const BindingFlags all = BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 const BindingFlags fields = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 var manifest = mod.GetType("ServiceCoverageFix.BetaManifest", true)!;
@@ -44,20 +44,49 @@ var registration = Reader.Read(patches.GetMethod("Validate", all)!,
         method.IsGenericMethod && method.Name == "EarlyJobInit")
     .Select(instruction => ((MethodInfo)instruction.operand).GetGenericArguments().Single()).ToArray();
 var assemblyHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(game.Location))).ToLowerInvariant();
-foreach (var (feature, owner, factory, sourceName, workerName) in new[] {
-    ("Housing", "Game.Simulation.CitizenPathfindSetup", "SetupFindHome", "Game.Simulation.CitizenPathfindSetup+SetupFindHomeJob", "HousingJob"),
-    ("Seller", "Game.Simulation.ResourcePathfindSetup", "SetupResourceSeller", "Game.Simulation.ResourcePathfindSetup+SetupResourceSellerJob", "SellerJob"),
+(string feature, string owner, string factory, string source, string worker)[] sites = {
     ("Water", "Game.Simulation.WaterPipeFlowSystem", "ScheduleFlowJob", "Game.Simulation.WaterPipeFlowJob", "OptimizedWaterFlowJob"),
     ("Route", "Game.Pathfind.PathfindQueueSystem", "ScheduleWorkerJobs", "Game.Pathfind.PathfindQueueSystem+PathfindWorkerJob", "RouteJob"),
     ("CompanyCommercial", "Game.Simulation.CommercialFindPropertySystem", "OnUpdate", "Game.Buildings.PropertyUtils+CompanyFindPropertyJob", "CompanyPropertyJob"),
     ("CompanyIndustrial", "Game.Simulation.IndustrialFindPropertySystem", "OnUpdate", "Game.Buildings.PropertyUtils+CompanyFindPropertyJob", "CompanyPropertyJob")
-})
+};
+Require(Enum.GetNames(featureType).SequenceEqual(sites.Select(s => s.feature)), "unexpected beta site inventory");
+var workers = sites.Select(s => mod.GetType("ServiceCoverageFix." + s.worker, true)!).Distinct().ToArray();
+Require(registration.Length == workers.Length && workers.All(t => registration.Contains(t)),
+    "unexpected concrete producer registration");
+var stamps = mod.GetCustomAttributes<AssemblyMetadataAttribute>().Select(a => a.Key)
+    .Where(key => key.StartsWith("ServiceCoverageFix.Beta.", StringComparison.Ordinal))
+    .Select(key => key.Substring("ServiceCoverageFix.Beta.".Length))
+    .Where(key => key != "GameSha256" && !key.StartsWith("Module.", StringComparison.Ordinal));
+Require(stamps.Order().SequenceEqual(new[] { "Company", "Route", "Water" }), "unexpected worker stamps");
+var bridge = mod.GetType("ServiceCoverageFix.BetaSchedule", true)!;
+var loader = patches.GetMethod("ResolveSite", all)!;
+foreach (string retired in new[] { "Housing", "Seller" })
+{
+    Require(bridge.GetMethod(retired, all) == null && patches.GetMethod(retired, all) == null &&
+        mod.GetType("ServiceCoverageFix." + retired + "Job") == null, "retired dispatch path survived: " + retired);
+}
+using (var stream = File.OpenRead(mod.Location))
+using (var pe = new PEReader(stream))
+{
+    // Cover both reflection lookups and compiled member/type references in the entire shipping assembly.
+    var metadata = pe.GetMetadataReader();
+    var names = metadata.TypeReferences.Select(h => metadata.GetString(metadata.GetTypeReference(h).Name))
+        .Concat(metadata.MemberReferences.Select(h => metadata.GetString(metadata.GetMemberReference(h).Name)));
+    var literals = new List<string>();
+    for (var h = metadata.GetNextHandle(default(UserStringHandle)); !h.IsNil; h = metadata.GetNextHandle(h))
+        literals.Add(metadata.GetUserString(h));
+    var retired = new[] { "CitizenPathfindSetup", "ResourcePathfindSetup", "SetupFindHome", "SetupResourceSeller" };
+    foreach (string value in names.Concat(literals))
+        Require(!retired.Any(value.Contains), "retired lookup in release assembly: " + value);
+}
+Console.WriteLine("Verified exact site, producer and stamp inventories and absence of retired assembly lookups and bridges");
+foreach (var (feature, owner, factory, sourceName, workerName) in sites)
 {
     var f = Enum.Parse(featureType, feature);
     verify.Invoke(null, new[] { f, assemblyHash });
     var stock = game.GetType(sourceName, true)!;
     var mirror = mod.GetType("ServiceCoverageFix." + workerName, true)!;
-    Require(registration.Count(type => type == mirror) == 1, "missing concrete producer registration: " + feature);
     var sourceFields = stock.GetFields(fields);
     if (feature is "Water" or "CompanyCommercial" or "CompanyIndustrial")
     {
@@ -75,22 +104,10 @@ foreach (var (feature, owner, factory, sourceName, workerName) in new[] {
                 SafetyAttrs(other).SequenceEqual(SafetyAttrs(field)), "field layout/access: " + field.Name);
         }
     }
-    string wrapperBytes = "";
-    if (feature is "Seller" or "Housing")
-    {
-        var wrapper = entities.GetType("Unity.Entities.JobChunkExtensions+JobChunkWrapper`1", true)!;
-        var a = wrapper.MakeGenericType(stock); var b = wrapper.MakeGenericType(mirror);
-        Require(Size(a) == Size(b), "producer wrapper size");
-        foreach (var field in a.GetFields(fields))
-        {
-            var other = b.GetField(field.Name, fields)!;
-            Require((field.Name == "JobData" ? other.FieldType == mirror : other.FieldType == field.FieldType)
-                && Offset(field) == Offset(other), "producer wrapper " + field.Name);
-        }
-        wrapperBytes = $", chunk producer wrapper {Size(b)} B";
-    }
-
     var method = game.GetType(owner, true)!.GetMethods(all).Single(x => x.Name == factory);
+    object?[] resolved = { f, null, null };
+    Require(Equals(loader.Invoke(null, resolved), method) && Equals(resolved[1], stock) && Equals(resolved[2], mirror),
+        "release runtime resolved the wrong site or job: " + feature);
     var transpiler = patches.GetMethod(feature, all)!;
     // The live path initializes this slot after Unity's native producer registration succeeds.
     // Supply the reviewed Type expressly for the offline Harmony reader/emitter test.
@@ -102,7 +119,7 @@ foreach (var (feature, owner, factory, sourceName, workerName) in new[] {
     List<CodeInstruction> Transform(List<CodeInstruction> body) =>
         ((IEnumerable<CodeInstruction>)transpiler.Invoke(null, new object[] {body})!).ToList();
     int site = code.FindIndex(i => i.operand is MethodInfo m && m.IsGenericMethod &&
-        m.GetGenericArguments().FirstOrDefault() == stock && m.Name is "Schedule" or "ScheduleParallel");
+        m.GetGenericArguments().FirstOrDefault() == stock && m.Name == "Schedule");
     Require(site >= 0, "missing source schedule");
     var output = Transform(code.Select(i => new CodeInstruction(i)).ToList());
     Require(output.Count == code.Count && (bool)enabled.Invoke(null, new[] { f })!, "exactly one replacement");
@@ -125,7 +142,7 @@ foreach (var (feature, owner, factory, sourceName, workerName) in new[] {
         var result = Transform(invalid);
         Require(!(bool)enabled.Invoke(null, new[] { f })! && result.Select(i => (i.opcode, i.operand)).SequenceEqual(expected), "changed caller should retain stock");
     }
-    Console.WriteLine($"{feature} passed: {sourceFields.Length} stock fields, worker {Size(mirror)} B{wrapperBytes}, genuine Harmony stream and serialized bridge, JIT, two invalid callers");
+    Console.WriteLine($"{feature} passed: {sourceFields.Length} stock fields, worker {Size(mirror)} B, genuine Harmony stream and serialized bridge, JIT, two invalid callers");
 }
 
 static string[] SafetyAttrs(FieldInfo field) => field.CustomAttributes.Where(a =>

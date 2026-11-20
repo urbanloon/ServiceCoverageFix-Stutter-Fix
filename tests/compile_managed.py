@@ -27,12 +27,17 @@ command = [args.dotnet, str(args.csc.resolve()), "-nologo", "-target:library", "
            "-unsafe", "-nullable:enable", "-langversion:latest", "-nostdlib+", "-out:" + str(output)]
 command += ["-r:" + str(managed / (name + ".dll")) for name in references]
 command.append("-r:" + str(args.harmony.resolve()))
-command += [str(path) for path in sorted(source.rglob("*.cs"))]
+config = ET.parse(project / "ServiceCoverageFix.csproj")
+compile_item = config.find('.//Compile[@Include="src/**/*.cs"]')
+excluded = set()
+if source == project / "src" and compile_item is not None:
+    excluded.update(compile_item.get("Exclude", "").split(";"))
+command += [str(path) for path in sorted(source.rglob("*.cs"))
+            if "src/" + path.relative_to(source).as_posix() not in excluded]
 with tempfile.TemporaryDirectory(prefix="scf-managed-") as temp:
     work = Path(temp)
     # Original 0.3 fixtures use alternate source roots without beta workers.
     if (source / "Beta" / "RouteJob.cs").is_file():
-        config = ET.parse(project / "ServiceCoverageFix.csproj")
         constants = config.findtext(".//DefineConstants", default="").split(";")
         if "SCF_BETA" not in constants:
             raise ValueError("Project build symbol SCF_BETA is missing.")
