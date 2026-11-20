@@ -42,14 +42,15 @@ foreach (var property in settingsType.GetProperties(all).Where(p => p.DeclaringT
 }
 var writerInterface = context.LoadFromAssemblyName(new AssemblyName("Colossal.UI.Binding"))
     .GetType("Colossal.UI.Binding.IJsonWriter", true)!;
-RecordingWriter Render(string name)
+var widgetInterface = game.GetType("Game.UI.Widgets.IWidget", true)!;
+RecordingWriter RenderWidget(object widget)
 {
-    object widget = widgets[name];
-    widget.GetType().GetMethod("Update", all)!.Invoke(widget, null);
+    widgetInterface.GetMethod("Update")!.Invoke(widget, null);
     var writer = (RecordingWriter)DispatchProxy.Create(writerInterface, typeof(RecordingWriter));
-    widget.GetType().GetMethod("WriteProperties", all)!.Invoke(widget, new[] {(object)writer});
+    widgetInterface.GetMethod("WriteProperties")!.Invoke(widget, new[] {(object)writer});
     return writer;
 }
+RecordingWriter Render(string name) => RenderWidget(widgets[name]);
 void Expect(string property, string pattern)
 {
     var output = Render(property).Strings;
@@ -62,23 +63,56 @@ var switches = new Dictionary<string, string>
     { "RouteSearch", "Route search" },
     { "CompanyPropertySearch", "Company property search" }
 };
-var expected = new HashSet<string> { "ExecutionStatus", "WorkloadByService", "BetaCompatibility" };
+var expected = new HashSet<string> { "ExecutionStatus", "WorkloadByService", "Refresh", "BetaCompatibility" };
 expected.UnionWith(switches.Keys);
 if (!expected.SetEquals(widgets.Keys))
     throw new Exception("Unexpected options menu: " + string.Join(", ", widgets.Keys));
 if (widgets.Values.Count(w => w.GetType().FullName == "Game.UI.Widgets.ToggleField") != 3)
     throw new Exception("Expected exactly three toggle widgets.");
 
-Expect("ExecutionStatus", "Inactive");
+var row = widgets["Refresh"];
+var children = (Array)row.GetType().GetProperty("children")!.GetValue(row)!;
+if (row.GetType().FullName != "Game.UI.Widgets.ButtonRow" || children.Length != 1)
+    throw new Exception("Refresh must be a game button.");
+var button = children.GetValue(0)!;
+if (button.GetType().FullName != "Game.UI.Widgets.Button" ||
+    !RenderWidget(button).Strings.Any(key => labels.GetValueOrDefault(key) == "Refresh"))
+    throw new Exception("Refresh button label is missing.");
+int Captures() => (int)diagnostic.GetField("_nextVersion", all)!.GetValue(null)!;
+void Press()
+{
+    int before = Captures();
+    button.GetType().GetMethod("Invoke")!.Invoke(button, null);
+    if (Captures() != before + 1) throw new Exception("A game button press must take exactly one snapshot.");
+}
+
+const string unsampledRows = "Open Diagnostics or press Refresh for a reading.";
+Expect("ExecutionStatus", "Not checked yet");
+Expect("WorkloadByService", unsampledRows);
+if (Captures() != 0) throw new Exception("Registration captured a diagnostic snapshot.");
 modType.GetField("_owner", all)!.SetValue(null, owner);
 modType.GetField("_compatibilityInactiveReason", all)!.SetValue(owner, "Inactive. Widget fixture contract mismatch.");
+diagnosticSettings.GetMethod("SetOptionsRegistered", all)!.Invoke(settings, new object[]{true});
+var core = Assembly.Load("Colossal.Core");
+var defaults = Activator.CreateInstance(settingsType, owner)!;
+var diff = core.GetType("Colossal.Json.DiffUtility", true)!.GetMethod("DiffWithPersistent")!;
+diff.Invoke(null, new object?[]{settings, defaults, null, null, Type.Missing});
+_ = settingsType.GetProperty("ExecutionStatus")!.GetValue(settings);
+_ = settingsType.GetProperty("WorkloadByService")!.GetValue(settings);
+if (Captures() != 0) throw new Exception("Settings serialization consumed the first display snapshot.");
 Expect("ExecutionStatus", "Inactive on this game version");
 Expect("WorkloadByService", "No workloads recorded.");
+if (Captures() != 1) throw new Exception("The first visible diagnostics widgets must share one snapshot.");
 modType.GetField("_compatibilityInactiveReason", all)!.SetValue(owner, null);
 diagnostic.GetMethod("MarkInstalled", all)!.Invoke(null, null);
-Expect("ExecutionStatus", "Waiting for a coverage update");
-Expect("WorkloadByService", "Latest workloads" + Environment.NewLine + "No workloads recorded.");
 diagnostic.GetMethod("StartLoadedSession", all)!.Invoke(null, new[] {owner});
+// A workload-only search can render this widget before the Diagnostics tab opens.
+Expect("WorkloadByService", unsampledRows);
+if (Captures() != 1) throw new Exception("Rendering a workload-only search result acquired a snapshot.");
+Expect("ExecutionStatus", "Waiting for a coverage update");
+string emptyRows = "Latest workloads" + Environment.NewLine + "No workloads recorded.";
+Expect("WorkloadByService", emptyRows);
+if (Captures() != 2) throw new Exception("First display after a loaded session must take one new snapshot.");
 // Seed one known completed sample in the managed history. Worker publication
 // and overlapping schedules are exercised separately by the runtime harness.
 var simulation = diagnostic.GetField("_simulation", all)!.GetValue(null)!;
@@ -92,12 +126,25 @@ sample.GetType().GetField("Workload", all)!.SetValue(sample, counts);
 int park = Convert.ToInt32(Enum.Parse(game.GetType("Game.Net.CoverageService", true)!, "Park"));
 latest.SetValue(sample, park);
 simulation.GetType().GetField("ReleasedCompleted", all)!.SetValue(simulation, 1L);
+for (int i = 0; i < 8; i++)
+{
+    Expect("ExecutionStatus", "Waiting for a coverage update");
+    Expect("WorkloadByService", emptyRows);
+}
+if (Captures() != 2) throw new Exception("Ordinary updates sampled live diagnostics.");
+Press();
 Expect("ExecutionStatus", "Active");
-Expect("WorkloadByService", "Latest workloads" + Environment.NewLine + "Park — 2 providers, 12 available, 7 processed");
+Expect("WorkloadByService", "Latest workloads" + Environment.NewLine + "Park: 2 providers, 12 available, 7 processed");
 diagnostic.GetMethod("RecordFallback", all)!.Invoke(null, new object[] {new Exception("preview-widget-test"), true});
 Expect("ExecutionStatus", "Active");
 diagnostic.GetMethod("RecordFallback", all)!.Invoke(null, new object[] {new Exception("simulation-widget-test"), false});
+Expect("ExecutionStatus", "Active");
+Press();
 Expect("ExecutionStatus", "A coverage update used the game's calculation");
+diagnostic.GetMethod("StartLoadedSession", all)!.Invoke(null, new[] {owner});
+Expect("ExecutionStatus", "A coverage update used the game's calculation");
+Expect("WorkloadByService", emptyRows);
+if (Captures() != 5) throw new Exception("Incorrect capture count after repeated presses and a new load.");
 Expect("BetaCompatibility", "These beta options may be incompatible with Big City Performance.");
 foreach (var (key, label) in switches)
 {
@@ -128,7 +175,7 @@ for (int mask = 0; mask < 1 << names.Length; mask++)
 settingsType.GetMethod("SetDefaults")!.Invoke(settings, null);
 foreach (string key in names)
     if (Render(key).Booleans["value"]) throw new Exception(key + " stayed on after resetting defaults");
-Console.WriteLine("PASS: six game Options widgets, three localized opt-in toggles in all eight combinations, exact compatibility text, observed status and compact service rows.");
+Console.WriteLine("PASS: seven game Options widgets, one capture per visible session and native Refresh button press, registration and real JSON diff skipped, frozen status and colon-separated service rows, three localized toggles in all eight combinations.");
 
 public class RecordingWriter : DispatchProxy
 {

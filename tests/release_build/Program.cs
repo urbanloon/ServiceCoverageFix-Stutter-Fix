@@ -16,7 +16,7 @@ AssemblyLoadContext.Default.Resolving += (context, name) => {
 };
 var game = Assembly.LoadFrom(Path.Combine(managed, "Game.dll"));
 var mod = Assembly.LoadFrom(Path.GetFullPath(args[1]));
-Require(mod.GetName().Version == new Version(0, 4, 2, 0), "release assembly version");
+Require(mod.GetName().Version == new Version(0, 4, 3, 0), "release assembly version");
 var pdb = Path.ChangeExtension(mod.Location, ".pdb");
 if (File.Exists(pdb))
 {

@@ -6,7 +6,7 @@
     <DefineConstants>$(DefineConstants);SCF_BETA</DefineConstants>
     <AssemblyName>ServiceCoverageFix</AssemblyName>
     <RootNamespace>ServiceCoverageFix</RootNamespace>
-    <Version>0.4.2</Version>
+    <Version>0.4.3</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

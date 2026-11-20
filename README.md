@@ -4,11 +4,9 @@ Service Coverage Stutter Fix reduces a recurring simulation hitch in Cities: Sky
 
 [Service Coverage Stutter Fix on Paradox Mods](https://mods.paradoxplaza.com/mods/157236/Windows)
 
-## Version 0.4.2
+## Version 0.4.3
 
-This hotfix restores vanilla housing and resource-seller searches after reports of simulation errors. The fix applies even if you enabled those options in 0.4.0 or 0.4.1. Restart the game after updating.
-
-Service coverage runs by default. **Options → Service Coverage Stutter Fix → Diagnostics** shows coverage status and the latest workload for each service, including participating providers and available and processed coverage elements.
+The service-coverage fix runs automatically. **Options → Service Coverage Stutter Fix → Diagnostics** takes one reading the first time you view it after loading a city. Press **Refresh** for updated numbers. Each service shows how many providers took part in its last coverage update and how many coverage elements were available and processed.
 
 | Beta option | What it speeds up |
 |---|---|

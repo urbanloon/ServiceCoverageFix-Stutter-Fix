@@ -118,6 +118,7 @@ namespace ServiceCoverageFix
                 _diagnosticLocale = new DiagnosticLocale(_settings);
                 Game.SceneFlow.GameManager.instance.localizationManager.AddSource("en-US", _diagnosticLocale);
                 _settings.RegisterInOptionsUI();
+                _settings.SetOptionsRegistered(true);
             }
             catch (Exception uiError)
             {
@@ -182,6 +183,7 @@ namespace ServiceCoverageFix
             }, ref failures);
             AttemptCleanup(() =>
             {
+                _settings?.SetOptionsRegistered(false);
                 _settings?.UnregisterInOptionsUI();
                 _settings = null;
             }, ref failures);

@@ -9,15 +9,19 @@
 	<LongDescription><![CDATA[
 Some cities experience a severe, rhythmic CPU stall while the simulation is running. At 1× speed, the hitch repeats approximately every 4.4 seconds and can freeze the game for 74–97 milliseconds. At higher simulation speeds, the same service-coverage workload runs more frequently.
 
-**Optional beta settings**
+**Beta options**
 
-Under **Options → Service Coverage Stutter Fix → Beta options**, you can enable:
+The service-coverage fix runs automatically. Three optional settings are available under **Options → Service Coverage Stutter Fix → Beta options**:
 
-- **Water flow** speeds up water and sewage calculations on branching pipe networks.
-- **Route search** speeds up selecting the next step in large route searches.
-- **Company property search** reuses building occupancy checks while businesses compare properties.
+- **Water flow:** Speeds up water and sewage calculations on branching pipe networks.
+- **Route search:** Speeds up choosing the next step when the game compares many possible routes.
+- **Company property search:** Reuses occupancy checks when businesses look for commercial or industrial buildings.
 
-All three start off. These beta options may be incompatible with Big City Performance. The FPS figures and playtesting below refer to the original service-coverage fix.
+All three are off by default. These beta options may be incompatible with Big City Performance.
+
+**Diagnostics** shows the last recorded coverage update for each service. For parks, you can see how many providers took part and how many coverage elements were available and processed. Press **Refresh** for a new reading.
+
+The FPS results and playtesting below refer to the original service-coverage fix.
 
 **ETW tracing and native-code analysis identified the hotspot as:**
 
@@ -75,21 +79,24 @@ P.S. If you're curious about the computer-science idea behind why changing an al
 	<Tag Value="Code Mod" />
 
 	<!-- Version -->
-	<ModVersion Value="0.4.2" />
+	<ModVersion Value="0.4.3" />
 	<GameVersion Value="*" />
 
-	<ChangeLog>0.4.2
-- Fixed an issue with the housing and resource-seller beta options. Both searches now use vanilla.
-- Removed the beta status panel and simplified Diagnostics to show coverage status and workload by service.
+	<ChangeLog>0.4.3
+- Diagnostics takes one reading the first time you view it after loading a city. Press Refresh for updated numbers.
+
+0.4.2
+- Fixed simulation errors by restoring the game's normal housing and resource-seller searches.
+- Simplified the menu to show coverage status and workload by service.
 
 0.4.1
-- Added optional company property search for commercial and industrial businesses.
-- Clarified the housing search tooltip and added a Big City Performance compatibility notice.
+- Added an option to speed up property searches for commercial and industrial businesses.
+- Added a warning that the beta options may be incompatible with Big City Performance.
 
 0.4.0
-- Added four optional optimizations for water flow, route search, housing search, and resource-seller search. All four were off by default.
-- Added a beta status display and updated the mod thumbnail.
-- Included faster service-coverage updates and tool previews, plus per-service provider and coverage element counts.</ChangeLog>
+- Added optional speedups for water flow, route search, housing search, and resource-seller search. All were off by default.
+- Improved coverage updates and map previews. Diagnostics showed how many providers took part and how many coverage elements were available and processed.
+- Added a beta status display and updated the mod thumbnail.</ChangeLog>
 
 	<!-- Supported values: Public, Private, Unlisted -->
 	<AccessLevel Value="Public" />

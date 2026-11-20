@@ -45,9 +45,6 @@ namespace ServiceCoverageFix
             ManagedExecutions != 0 ? ManagedState :
             Completed != 0 ? BurstState :
             Scheduled != 0 ? "Awaiting execution" : "Awaiting coverage update";
-        internal string CoverageStatus => !Installed ? "Inactive" :
-            Fallbacks != 0 ? "A coverage update used the game's calculation" :
-            Completed != 0 ? "Active" : "Waiting for a coverage update";
 
         private string? _text;
         public override string ToString() => _text ??=
@@ -73,7 +70,6 @@ namespace ServiceCoverageFix
         {
             internal long Submission;
             internal WorkloadCounts Workload;
-            internal string? Row;
         }
 
         private static readonly List<PassSlot> Slots = new List<PassSlot>();
@@ -82,8 +78,6 @@ namespace ServiceCoverageFix
         private sealed class CallerHistory
         {
             internal readonly Sample[] Latest = new Sample[256];
-            internal string? Text;
-            internal long TextVersion;
             internal CoverageRuntimeStatus? Status;
             internal long ReleasedCompleted;
             internal long ReleasedManaged;
@@ -102,7 +96,32 @@ namespace ServiceCoverageFix
         private static long _workloadCutoff;
         private static long _fallbacks;
         private static string _lastFailure = string.Empty;
-        private static string _lastReportedState = string.Empty;
+        internal sealed class OptionsSnapshot
+        {
+            internal readonly string Status;
+            internal readonly string Workloads;
+            internal readonly int Version;
+
+            internal OptionsSnapshot(string status, string workloads, int version)
+            {
+                Status = status;
+                Workloads = workloads;
+                Version = version;
+            }
+        }
+
+        // A completed city load replaces this holder. An in-flight formatter can
+        // finish writing to its old holder without publishing into the next city.
+        private sealed class OptionsSession
+        {
+            internal volatile OptionsSnapshot? Snapshot;
+        }
+
+        private static volatile OptionsSession _options = new OptionsSession();
+        private static readonly OptionsSnapshot NotChecked = new OptionsSnapshot(
+            "Not checked yet", "Open Diagnostics or press Refresh for a reading.", 0);
+        private static int _nextVersion;
+        internal static OptionsSnapshot CachedOptions => _options.Snapshot ?? NotChecked;
 
         internal static void Initialize(bool allocateWorkerSlot = true)
         {
@@ -116,7 +135,8 @@ namespace ServiceCoverageFix
                 _scheduled = _fallbacks = _workloadCutoff = 0;
                 _totalStatus = null;
                 _installed = _previewInstalled = false;
-                _lastFailure = _lastReportedState = string.Empty;
+                _lastFailure = string.Empty;
+                _options = new OptionsSession();
             }
         }
 
@@ -130,9 +150,7 @@ namespace ServiceCoverageFix
                 _workloadCutoff = _scheduled;
                 Array.Clear(_simulation.Latest, 0, _simulation.Latest.Length);
                 Array.Clear(_preview.Latest, 0, _preview.Latest.Length);
-                _simulation.TextVersion++;
-                _preview.TextVersion++;
-                _simulation.Text = _preview.Text = null;
+                _options = new OptionsSession();
             }
         }
 
@@ -158,22 +176,13 @@ namespace ServiceCoverageFix
             return slot;
         }
 
-        private static void ObserveWorkload(PassSlot slot)
+        private static void ArchiveWorkload(PassSlot slot, long completed, ExecutionCounters* counters)
         {
-            if (slot.Submission == 0 || slot.WorkloadObserved) return;
-            var counters = (ExecutionCounters*)NativeArrayUnsafeUtility.GetUnsafePtr(slot.Counters);
-            long completed = Volatile.Read(ref counters->Completed);
-            if (completed == slot.ObservedCompletions) return;
-            // The acquire read above proves the sole writer has finished its
-            // payload. Sync excludes reuse while the UI copies that payload.
+            if (slot.Submission == 0 || slot.WorkloadObserved || completed == slot.ObservedCompletions) return;
             CallerHistory history = slot.Preview ? _preview : _simulation;
             if (slot.Submission > _workloadCutoff && (uint)slot.Service < history.Latest.Length &&
                 history.Latest[slot.Service].Submission < slot.Submission)
-            {
                 history.Latest[slot.Service] = new Sample { Submission = slot.Submission, Workload = counters->Workload };
-                history.TextVersion++;
-                history.Text = null;
-            }
             slot.ObservedCompletions = completed;
             slot.WorkloadObserved = true;
         }
@@ -192,7 +201,13 @@ namespace ServiceCoverageFix
                     {
                         // Reclaim a finished handle only. No active job is forced to run.
                         slot.Handle.Complete();
-                        ObserveWorkload(slot);
+                        if (!slot.WorkloadObserved)
+                        {
+                            // Complete has joined this slot's writer. Preserve a published
+                            // result before reuse, including when the panel is never opened.
+                            var counters = (ExecutionCounters*)NativeArrayUnsafeUtility.GetUnsafePtr(slot.Counters);
+                            ArchiveWorkload(slot, counters->Completed, counters);
+                        }
                         slot.Submission = 0;
                         slot.Handle = default;
                     }
@@ -235,56 +250,66 @@ namespace ServiceCoverageFix
             }
         }
 
-        internal static string FormatWorkloads(bool preview = false)
+        internal static OptionsSnapshot ReadOptions(bool refresh = false)
+        {
+            OptionsSession session = _options;
+            OptionsSnapshot? snapshot = session.Snapshot;
+            if (!refresh && snapshot != null) return snapshot;
+            // Serialize initial/manual captures independently of the scheduling lock.
+            lock (session)
+            {
+                if (!refresh && session.Snapshot != null) return session.Snapshot;
+                return session.Snapshot = CaptureOptions(false);
+            }
+        }
+
+        internal static OptionsSnapshot CaptureOptions(bool preview)
         {
             Sample[] samples;
-            CallerHistory history;
-            long version;
             KeyValuePair<byte, string>[] labels;
+            string status;
+            int version = Interlocked.Increment(ref _nextVersion);
             lock (Sync)
             {
-                if (!_installed || (preview && !_previewInstalled)) return "No workloads recorded.";
-                if (!preview && ServiceCoverageSystemPatch.ServiceBindingAvailable == false)
-                    return "Service workloads are unavailable on this game version.";
-                history = preview ? _preview : _simulation;
+                if (!_installed || (preview && !_previewInstalled))
+                    return new OptionsSnapshot(Mod.CompatibilityInactiveReason == null ? "Inactive" :
+                        "Inactive on this game version", "No workloads recorded.", version);
+                CallerHistory history = preview ? _preview : _simulation;
+                long completed = history.ReleasedCompleted;
                 foreach (PassSlot slot in Slots)
-                    if (slot.Preview == preview) ObserveWorkload(slot);
-                if (history.Text != null) return history.Text;
+                {
+                    if (slot.Preview != preview) continue;
+                    var counters = (ExecutionCounters*)NativeArrayUnsafeUtility.GetUnsafePtr(slot.Counters);
+                    // One acquire read supplies both the status and the workload
+                    // publication test. Never wait for a job while reading Options.
+                    long published = Volatile.Read(ref counters->Completed);
+                    completed += published;
+                    ArchiveWorkload(slot, published, counters);
+                }
+                status = history.Fallbacks != 0 ? "A coverage update used the game's calculation" :
+                    completed != 0 ? "Active" : "Waiting for a coverage update";
+                if (!preview && ServiceCoverageSystemPatch.ServiceBindingAvailable == false)
+                    return new OptionsSnapshot(status, "Service workloads are unavailable on this game version.", version);
                 labels = ServiceRows.Labels;
                 samples = new Sample[labels.Length];
                 for (int i = 0; i < samples.Length; i++) samples[i] = history.Latest[labels[i].Key];
-                version = history.TextVersion;
             }
 
-            // Format a managed copy. Rendering a newly completed pass does not
-            // hold the scheduling lock while formatting every service and number.
+            // Format the managed copy outside the scheduling lock.
             var rows = new StringBuilder("Latest workloads");
             bool hasWorkload = false;
             for (int i = 0; i < samples.Length; i++)
             {
                 if (samples[i].Submission == 0) continue;
-                samples[i].Row ??= FormatRow(labels[i].Value, samples[i].Workload);
-                rows.AppendLine().Append(samples[i].Row);
+                WorkloadCounts counts = samples[i].Workload;
+                rows.AppendLine().AppendFormat("{0}: {1:N0} {2}, {3:N0} available, {4:N0} processed",
+                    labels[i].Value, counts.Providers, counts.Providers == 1 ? "provider" : "providers",
+                    counts.Available, counts.Processed);
                 hasWorkload = true;
             }
             if (!hasWorkload) rows.AppendLine().Append("No workloads recorded.");
-            string result = rows.ToString();
-            lock (Sync)
-            {
-                if (version == history.TextVersion)
-                {
-                    for (int i = 0; i < samples.Length; i++)
-                        history.Latest[labels[i].Key].Row = samples[i].Row;
-                    history.Text = result;
-                }
-            }
-            return result;
+            return new OptionsSnapshot(status, rows.ToString(), version);
         }
-
-        private static string FormatRow(string name, WorkloadCounts counts) =>
-            string.Format("{0} — {1:N0} {2}, {3:N0} available, {4:N0} processed",
-                name, counts.Providers, counts.Providers == 1 ? "provider" : "providers",
-                counts.Available, counts.Processed);
 
         internal static void RecordFallback(Exception error, bool preview = false)
         {
@@ -340,45 +365,12 @@ namespace ServiceCoverageFix
             }
         }
 
-        internal static void ReportTransition()
-        {
-            // Diagnostics must never trigger a gameplay fallback.
-            try
-            {
-                CoverageRuntimeStatus status;
-                lock (Sync)
-                {
-                    // Once Burst has run, only a managed job or a fallback can
-                    // change the log state. Diagnostic tools can still read the complete counters.
-                    if (_installed)
-                    {
-                        if (_fallbacks != 0 && _lastReportedState == CoverageRuntimeStatus.FallbackState) return;
-                        if (_fallbacks == 0 && _lastReportedState == CoverageRuntimeStatus.ManagedState) return;
-                        if (_fallbacks == 0 && _lastReportedState == CoverageRuntimeStatus.BurstState)
-                        {
-                            bool managed = false;
-                            foreach (PassSlot slot in Slots)
-                            {
-                                var p = (ExecutionCounters*)NativeArrayUnsafeUtility.GetUnsafePtr(slot.Counters);
-                                if (Volatile.Read(ref p->Managed) != 0) { managed = true; break; }
-                            }
-                            if (!managed) return;
-                        }
-                    }
-                    status = Snapshot();
-                    if (status.State == _lastReportedState) return;
-                    _lastReportedState = status.State;
-                }
-                Mod.Log.Info($"Coverage execution status: {status}");
-            }
-            catch { /* Status reporting cannot affect simulation scheduling. */ }
-        }
-
         internal static void Dispose()
         {
             lock (Sync)
             {
                 _installed = _previewInstalled = false;
+                _options = new OptionsSession();
                 // If completion throws, retain the allocation rather than free
                 // memory that a worker might still reference.
                 foreach (PassSlot slot in Slots)
@@ -400,9 +392,6 @@ namespace ServiceCoverageFix
                 }
                 Array.Clear(_simulation.Latest, 0, _simulation.Latest.Length);
                 Array.Clear(_preview.Latest, 0, _preview.Latest.Length);
-                _simulation.TextVersion++;
-                _preview.TextVersion++;
-                _simulation.Text = _preview.Text = null;
             }
         }
     }

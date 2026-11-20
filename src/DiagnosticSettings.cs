@@ -11,16 +11,34 @@ namespace ServiceCoverageFix
     public class DiagnosticSettings : ModSetting
     {
         public DiagnosticSettings(IMod mod) : base(mod) { }
-        [SettingsUISection("Diagnostics")]
-        public string ExecutionStatus => Mod.CompatibilityInactiveReason == null
-            ? RuntimeDiagnostics.SnapshotCaller(false).CoverageStatus : "Inactive on this game version";
+        private bool _optionsRegistered;
 
+        // RegisterSetting builds and updates all widgets synchronously. Arm the
+        // initial sample after that initial pass, when the live UI can display it.
+        internal void SetOptionsRegistered(bool registered) => _optionsRegistered = registered;
+
+        [Colossal.Json.Exclude]
+        [SettingsUISection("Diagnostics")]
+        [SettingsUIValueVersion(typeof(DiagnosticSettings), nameof(DiagnosticsVersion))]
+        public string ExecutionStatus => RuntimeDiagnostics.CachedOptions.Status;
+
+        public int DiagnosticsVersion() => _optionsRegistered ? RuntimeDiagnostics.ReadOptions().Version : 0;
+
+        [Colossal.Json.Exclude]
         [SettingsUISection("Diagnostics")]
         [SettingsUIMultilineText]
         [SettingsUIDisplayName(typeof(DiagnosticSettings), nameof(SimulationWorkloadText))]
-        public string WorkloadByService => RuntimeDiagnostics.FormatWorkloads();
+        public string WorkloadByService => RuntimeDiagnostics.CachedOptions.Workloads;
 
         public LocalizedString SimulationWorkloadText() => LocalizedString.Value(WorkloadByService);
+
+        [Colossal.Json.Exclude]
+        [SettingsUISection("Diagnostics")]
+        [SettingsUIButton]
+        public bool Refresh
+        {
+            set { if (value && _optionsRegistered) RuntimeDiagnostics.ReadOptions(refresh: true); }
+        }
 
 #if SCF_BETA
         private Mod? _betaOwner;
@@ -89,6 +107,8 @@ namespace ServiceCoverageFix
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.RouteSearch)), "Route search" },
                 { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.RouteSearch)), "Optimize searches for routes across the transport network." },
 #endif
+                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.Refresh)), "Refresh" },
+                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.Refresh)), "Update the coverage status and latest completed workloads." },
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.ExecutionStatus)), "Coverage status" },
                 { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.ExecutionStatus)), "Shows whether the fix has processed a coverage update since the mod loaded." },
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.WorkloadByService)), "Latest workloads" },

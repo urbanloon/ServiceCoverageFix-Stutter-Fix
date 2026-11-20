@@ -209,7 +209,6 @@ namespace ServiceCoverageFix
         private static JobHandle Schedule<TApplyJob>(TApplyJob originalJob, JobHandle dependency, int service, bool preview)
             where TApplyJob : struct, IJob
         {
-            RuntimeDiagnostics.ReportTransition();
             try
             {
                 return RuntimeDiagnostics.Schedule(CreateOptimized(ref originalJob), dependency, service, preview);
