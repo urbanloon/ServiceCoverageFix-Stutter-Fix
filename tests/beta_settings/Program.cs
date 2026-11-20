@@ -15,7 +15,7 @@ var game = Assembly.Load("Game");
 var core = Assembly.Load("Colossal.Core");
 var settings = mod.GetType("ServiceCoverageFix.ServiceCoverageStutterFixSettings", true)!;
 var owner = Activator.CreateInstance(mod.GetType("ServiceCoverageFix.Mod", true)!)!;
-var flags = new[] {"HousingSearch", "ResourceSellerSearch", "WaterFlow", "RouteSearch"}.Select(n => settings.GetProperty(n)!).ToArray();
+var flags = new[] {"HousingSearch", "ResourceSellerSearch", "WaterFlow", "RouteSearch", "CompanyPropertySearch"}.Select(n => settings.GetProperty(n)!).ToArray();
 var defaults = Activator.CreateInstance(settings, owner)!;
 var live = Activator.CreateInstance(settings, owner)!;
 var registry = (IDictionary)game.GetType("Game.Modding.ModSetting", true)!.GetProperty("instances", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
@@ -30,13 +30,21 @@ var toJson = variant.GetMethods().First(m => m.Name == "ToJSON" && m.GetParamete
 void Set(object o, int mask) { for (int i=0;i<flags.Length;i++) flags[i].SetValue(o, (mask & (1<<i))!=0); }
 object? Save(object source, object? previous){ var result=diff.Invoke(null,new[]{source,defaults,previous,previous,Type.Missing}); if(result==null)return null;
     var text=(string)toJson.Invoke(result, toJson.GetParameters().Select(_=>(object)Type.Missing).ToArray())!; return load.Invoke(null,new object[]{text}); }
-for(int old=0;old<16;old++){
+for(int old=0;old<32;old++){
     Set(live, old);var previous=Save(live,null);
-    for(int mask=0;mask<16;mask++){
+    for(int mask=0;mask<32;mask++){
         Set(live, mask);var encoded=Save(live,previous);var next=Activator.CreateInstance(settings,owner)!;
         if(encoded!=null)write.Invoke(null,new object[]{encoded,next});
-        for(int i=0;i<4;i++)if((bool)flags[i].GetValue(next)! != ((mask&(1<<i))!=0))throw new Exception($"Persistence mismatch {old}->{mask}, {flags[i].Name}");
+        for(int i=0;i<flags.Length;i++)if((bool)flags[i].GetValue(next)! != ((mask&(1<<i))!=0))throw new Exception($"Persistence mismatch {old}->{mask}, {flags[i].Name}");
         if(!ReferenceEquals(registry[Id(next)],next))throw new Exception("Live registry entry was displaced on load");
     }
 }
-Console.WriteLine("PASS real game settings registry and Disk JSON round trip, all 256 previous-to-current toggle combinations");
+for(int mask=0;mask<16;mask++){
+    var legacy=new Dictionary<string,bool>();
+    for(int i=0;i<4;i++)if((mask&(1<<i))!=0) legacy[flags[i].Name]=true;
+    var encoded=load.Invoke(null,new object[]{System.Text.Json.JsonSerializer.Serialize(legacy)})!;
+    var next=Activator.CreateInstance(settings,owner)!;
+    write.Invoke(null,new object[]{encoded,next});
+    for(int i=0;i<flags.Length;i++)if((bool)flags[i].GetValue(next)! != ((mask&(1<<i))!=0))throw new Exception($"Legacy settings mismatch at {mask}, {flags[i].Name}");
+}
+Console.WriteLine("PASS real game settings registry and Disk JSON round trip, all 1,024 previous-to-current toggle combinations and 16 legacy four-option settings files");

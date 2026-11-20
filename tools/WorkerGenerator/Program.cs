@@ -34,18 +34,26 @@ try
 {
     if (qualified)
     {
-        RouteGenerator.Build(new AssemblyModel(Path.Combine(managed, "Game.dll")), staging);
+        var model = new AssemblyModel(Path.Combine(managed, "Game.dll"));
+        RouteGenerator.Build(model, staging);
+        CompanyGenerator.Build(model, staging);
         const string projectedHash = "9d2c5229ac6b2dd8a435b4d6713dcbfef0e26838d92acb26702e55714a6b1f8f";
         using var projected = File.OpenRead(Path.Combine(staging, "RouteBody.g.cs"));
         if (!Convert.ToHexString(SHA256.HashData(projected)).Equals(projectedHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Generated route source does not match the verified November projection.");
-        foreach (string feature in new[] { "Housing", "Seller", "Route", "Water" }) marks.Add(feature, "v1");
+        using var company = File.OpenRead(Path.Combine(staging, "CompanyBody.g.cs"));
+        const string companyProjection = "ce477b748c8e83cf700dd53f9663f29640f89b1a23873e3e71198b24f7176119";
+        if (!Convert.ToHexString(SHA256.HashData(company)).Equals(companyProjection, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Generated company source does not match the verified November projection.");
+        foreach (string feature in new[] { "Housing", "Seller", "Route", "Water", "Company" }) marks.Add(feature, "v1");
     }
     else
     {
         RouteGenerator.Fallback(staging);
+        File.WriteAllText(Path.Combine(staging, "CompanyBody.g.cs"),
+            "namespace Game.Buildings { internal static class CompanySearchBody { internal static void Execute(ref PropertyUtils.CompanyFindPropertyJob stock) => stock.Execute(); } }\n");
         marks.Clear();
-        Console.WriteLine("Unreviewed game reference set. The four beta options will be unavailable.");
+        Console.WriteLine("Unreviewed game reference set. The beta options will be unavailable.");
     }
     var manifest = new StringBuilder("// Generated compatibility metadata.\n");
     foreach (var entry in marks)

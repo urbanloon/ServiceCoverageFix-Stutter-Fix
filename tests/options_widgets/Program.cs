@@ -91,10 +91,11 @@ Expect("ExecutionCounts", "Fallback observed");
 Expect("PreviewExecutionCounts", "fallbacks=1");
 Expect("LastFailure", "simulation-widget-test");
 Expect("PreviewLastFailure", "preview-widget-test");
-var switches = new[] {"WaterFlow", "ResourceSellerSearch", "RouteSearch", "HousingSearch"};
+var switches = new[] {"WaterFlow", "ResourceSellerSearch", "RouteSearch", "HousingSearch", "CompanyPropertySearch"};
 if (widgets.ContainsKey("BetaStatus"))
 {
     Expect("BetaStatus", "Off");
+    Expect("BetaCompatibility", "These beta options may be incompatible with Big City Performance.");
     foreach (var key in switches)
     {
         var widget = Render(key);
@@ -129,7 +130,7 @@ if (widgets.ContainsKey("BetaStatus"))
     settingsType.GetMethod("SetDefaults")!.Invoke(settings, null);
     foreach (var key in switches)
         if (Render(key).Booleans["value"]) throw new Exception(key + " stayed on after resetting defaults");
-    Console.WriteLine("PASS: four game toggle properties and their widget JSON matched in all 16 combinations and reset to off.");
+    Console.WriteLine("PASS: five game toggle properties and their widget JSON matched in all 32 combinations and reset to off.");
 }
 Console.WriteLine($"PASS: {widgets.Count} game Options widgets. Simulation and preview diagnostics serialized the expected values.");
 

@@ -4,10 +4,11 @@ using HarmonyLib;
 
 internal static class Reader
 {
-    internal static List<CodeInstruction> Read(MethodInfo method, ILGenerator generator)
+    internal static List<CodeInstruction> Read(MethodInfo method, ILGenerator generator, bool inspectOnly = false)
     {
         var body=method.GetMethodBody()!;
-        if(body.ExceptionHandlingClauses.Count!=0)throw new NotSupportedException("New OnUpdate exception regions require review.");
+        // Inspection can read the call operands without emitting the exception regions.
+        if(!inspectOnly && body.ExceptionHandlingClauses.Count!=0)throw new NotSupportedException("New OnUpdate exception regions require review.");
         var bytes=body.GetILAsByteArray()!;
         var ops=typeof(OpCodes).GetFields(BindingFlags.Public|BindingFlags.Static)
             .Select(f=>(OpCode)f.GetValue(null)!).ToDictionary(o=>unchecked((ushort)o.Value));

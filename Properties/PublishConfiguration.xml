@@ -9,16 +9,17 @@
 	<LongDescription><![CDATA[
 Some cities experience a severe, rhythmic CPU stall while the simulation is running. At 1× speed, the hitch repeats approximately every 4.4 seconds and can freeze the game for 74–97 milliseconds. At higher simulation speeds, the same service-coverage workload runs more frequently.
 
-**New in 0.4.0: Optional beta settings**
+**Optional beta settings**
 
-Fixing service coverage can still leave slowdowns from other simulation jobs. These four options target those jobs. You can enable them individually under **Options → Service Coverage Stutter Fix → Beta options**. All four are off by default.
+Fixing service coverage can still leave slowdowns from other simulation jobs. Five optional optimizations target those jobs. You can turn them on individually under **Options → Service Coverage Stutter Fix → Beta options**. All five start off. **These beta options may be incompatible with Big City Performance.**
 
 - **Water flow:** When the game calculates water and sewage flow, it repeatedly picks the next pipe junction to check. This speeds up that step on branching networks.
 - **Resource-seller search:** When a buyer compares sellers, several can use the same market price. The game now looks up that price once per group of sellers and reuses it.
-- **Route search:** When thousands of possible route steps are waiting, the game spends time keeping them in order. This makes it faster to take the next step from the queue. PathfindLocalityFix takes priority when both mods are loaded.
-- **Housing search:** A household can consider many homes in one search. This reuses its income and support information across a group of homes instead of recalculating it for each one.
+- **Route search:** When thousands of possible route steps are waiting, the game spends time keeping them in order. This makes it faster to take the next step from the queue.
+- **Housing search:** A household can consider many homes in one search. The game checks the same homes and shelters, with the same rent limits and scoring. This option calculates the household’s income and support needs once per group of homes.
+- **Company property search:** Commercial and industrial businesses can check the same building’s renters many times while looking for premises. This option reuses each occupancy check within the search. The game still ranks the companies, scores the properties and assigns leases using its usual rules.
 
-The four betas matched vanilla results in offline tests. The FPS figures and 24 hours of playtesting below refer to the original service-coverage fix.
+The five betas matched vanilla results in offline tests. The FPS figures and 24 hours of playtesting below refer to the original service-coverage fix.
 
 **ETW tracing and native-code analysis identified the hotspot as:**
 
@@ -76,12 +77,12 @@ P.S. If you're curious about the computer-science idea behind why changing an al
 	<Tag Value="Code Mod" />
 
 	<!-- Version -->
-	<ModVersion Value="0.4.0" />
+	<ModVersion Value="0.4.1" />
 	<GameVersion Value="*" />
 
-	<ChangeLog>- Added four optional performance settings for water flow, resource-seller search, route search and housing search. All four are off by default.
-- Added Beta worker status in Options so you can see which settings are active or unavailable.
-- Updated the mod thumbnail.</ChangeLog>
+	<ChangeLog>- Added Company property search, an optional beta for commercial and industrial businesses. It starts off.
+- Clarified that Housing search checks the same homes and shelters using vanilla rules.
+- Added a Big City Performance compatibility note to Beta options.</ChangeLog>
 
 	<!-- Supported values: Public, Private, Unlisted -->
 	<AccessLevel Value="Public" />

@@ -60,5 +60,23 @@ namespace ServiceCoverageFix
             var work = new RouteSubmission {Job=job, Dependency=dependency};
             return BetaRuntime.TrySchedule(BetaFeature.Route, work, out var handle) ? handle : IJobExtensions.Schedule(job, dependency);
         }
+
+        private struct CompanySubmission : IBetaSubmission
+        {
+            internal Game.Buildings.PropertyUtils.CompanyFindPropertyJob Job;
+            internal JobHandle Dependency;
+            public JobHandle Schedule() => IJobExtensions.Schedule(new CompanyPropertyJob { Source = Job }, Dependency);
+        }
+
+        internal static JobHandle CompanyCommercial(Game.Buildings.PropertyUtils.CompanyFindPropertyJob job, JobHandle dependency)
+            => ScheduleCompany(BetaFeature.CompanyCommercial, job, dependency);
+        internal static JobHandle CompanyIndustrial(Game.Buildings.PropertyUtils.CompanyFindPropertyJob job, JobHandle dependency)
+            => ScheduleCompany(BetaFeature.CompanyIndustrial, job, dependency);
+
+        private static JobHandle ScheduleCompany(BetaFeature site, Game.Buildings.PropertyUtils.CompanyFindPropertyJob job, JobHandle dependency)
+        {
+            var work = new CompanySubmission { Job = job, Dependency = dependency };
+            return BetaRuntime.TrySchedule(site, work, out var handle) ? handle : IJobExtensions.Schedule(job, dependency);
+        }
     }
 }

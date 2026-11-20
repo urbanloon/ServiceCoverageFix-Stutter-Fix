@@ -36,7 +36,7 @@ namespace ServiceCoverageFix
         internal static void Validate(BetaFeature feature, string gameHash, IDictionary<string,string> entries, Func<string,Guid> actualId)
         {
             if (gameHash != BetaRuntime.GameHash || !entries.TryGetValue(Prefix + "GameSha256", out var recorded) || recorded != gameHash ||
-                !entries.TryGetValue(Prefix + feature, out var version) || version != "v1")
+                !entries.TryGetValue(Prefix + BetaFeatures.ManifestName(feature), out var version) || version != "v1")
                 throw new InvalidOperationException("Worker generation stamp or game fingerprint mismatch.");
             const string modules = Prefix + "Module.";
             if (entries.Keys.Count(key => key.StartsWith(modules, StringComparison.Ordinal)) != ReviewedModules.Count)

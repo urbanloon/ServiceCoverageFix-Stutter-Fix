@@ -8,7 +8,18 @@ using Unity.Jobs;
 
 namespace ServiceCoverageFix
 {
-    internal enum BetaFeature { Housing, Seller, Water, Route }
+    internal enum BetaFeature { Housing, Seller, Water, Route, CompanyCommercial, CompanyIndustrial }
+
+    internal static class BetaFeatures
+    {
+        internal const int SiteCount = (int)BetaFeature.CompanyIndustrial + 1;
+        internal static readonly BetaFeature[] Options = {
+            BetaFeature.Housing, BetaFeature.Seller, BetaFeature.Water, BetaFeature.Route, BetaFeature.CompanyCommercial
+        };
+        internal static bool IsCompany(BetaFeature site) => site == BetaFeature.CompanyCommercial || site == BetaFeature.CompanyIndustrial;
+        internal static bool YieldsToLocality(BetaFeature site) => site == BetaFeature.Route || IsCompany(site);
+        internal static string ManifestName(BetaFeature site) => IsCompany(site) ? "Company" : site.ToString();
+    }
 
     internal interface IBetaSubmission { JobHandle Schedule(); }
 
@@ -19,12 +30,12 @@ namespace ServiceCoverageFix
         private readonly object _gate = new object();
         private readonly JobHandle[] _handles = new JobHandle[64];
         private readonly bool[] _occupied = new bool[64];
-        private readonly bool[] _enabled = new bool[4];
-        private readonly string[] _state = { "Off", "Off", "Off", "Off" };
-        private readonly Harmony?[] _patches = new Harmony?[4];
-        private readonly MethodInfo?[] _targets = new MethodInfo?[4];
-        private readonly bool[] _installed = new bool[4];
-        private readonly Ownership?[] _ownership = new Ownership?[4];
+        private readonly bool[] _enabled = new bool[BetaFeatures.SiteCount];
+        private readonly string[] _state = Enumerable.Repeat("Off", BetaFeatures.SiteCount).ToArray();
+        private readonly Harmony?[] _patches = new Harmony?[BetaFeatures.SiteCount];
+        private readonly MethodInfo?[] _targets = new MethodInfo?[BetaFeatures.SiteCount];
+        private readonly bool[] _installed = new bool[BetaFeatures.SiteCount];
+        private readonly Ownership?[] _ownership = new Ownership?[BetaFeatures.SiteCount];
         private sealed class Ownership
         {
             internal readonly int Generation;
@@ -39,7 +50,8 @@ namespace ServiceCoverageFix
             .GetField("locker", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null);
         private readonly bool _compatible;
         private volatile bool _stopping;
-        private volatile bool _routeSuperseded;
+        private volatile bool _localityLoaded;
+        private volatile bool _companyRequested;
         private int _next;
 
         internal BetaRuntime(string hash)
@@ -60,7 +72,7 @@ namespace ServiceCoverageFix
         private void NoticeAssembly(Assembly assembly)
         {
             if (string.Equals(assembly.GetName().Name, "PathfindLocalityFix", StringComparison.OrdinalIgnoreCase))
-                _routeSuperseded = true;
+                _localityLoaded = true;
         }
 
         private bool CheckOwnership(BetaFeature feature, bool displaying = false, bool force = false)
@@ -104,7 +116,7 @@ namespace ServiceCoverageFix
             if (Volatile.Read(ref _enabled[i]))
             {
                 CheckOwnership(feature, displaying: true);
-                if (feature == BetaFeature.Route && _routeSuperseded) return "Inactive while PathfindLocalityFix is loaded";
+                if (BetaFeatures.YieldsToLocality(feature) && _localityLoaded) return "Inactive while PathfindLocalityFix is loaded";
                 if (!BetaPatches.IsUsable(feature)) return "Inactive. The game schedule call changed.";
                 if (!BetaPatches.SharesPublisher(feature)) return "Inactive. Another Harmony assembly rebuilt this method.";
                 if (!CurrentOwner(feature)) return "Inactive. The scheduling patch is missing or shared.";
@@ -114,46 +126,60 @@ namespace ServiceCoverageFix
 
         internal void Set(BetaFeature feature, bool enabled)
         {
-            int i = (int)feature;
-            if (HarmonyPatchLock == null)
+            bool company = BetaFeatures.IsCompany(feature);
+            if (HarmonyPatchLock == null || Monitor.IsEntered(HarmonyPatchLock))
             {
-                Volatile.Write(ref _state[i], enabled ? "Unsupported Harmony publication contract" : "Off");
+                string state = !enabled ? "Off" : HarmonyPatchLock == null
+                    ? "Unsupported Harmony publication contract" : "Inactive. Retry after patch publication.";
+                SetInactive(feature, state);
+                if (company) SetInactive(feature == BetaFeature.CompanyCommercial ? BetaFeature.CompanyIndustrial : BetaFeature.CompanyCommercial, state);
                 return;
             }
-            // Do not start a nested patch transaction from another mod's transpiler.
-            if (Monitor.IsEntered(HarmonyPatchLock))
-            {
-                Volatile.Write(ref _enabled[i], false);
-                Volatile.Write(ref _state[i], enabled ? "Inactive. Retry after patch publication." : "Off");
-                return;
-            }
-            // Settings and unpatching share Harmony's existing publication monitor.
-            // Never acquire or hold the scheduling gate while calling Harmony APIs.
+            // Serialize both company sites as one settings change without holding the handle tracker.
             lock (HarmonyPatchLock)
             {
-                if (_stopping) return;
-                Volatile.Write(ref _enabled[i], false);
-                if (!enabled) { Volatile.Write(ref _state[i], "Off"); return; }
-                if (!_compatible) { Volatile.Write(ref _state[i], "Unsupported game build"); return; }
-                if (feature == BetaFeature.Route && _routeSuperseded) { Volatile.Write(ref _state[i], "Inactive while PathfindLocalityFix is loaded"); return; }
-                try
+                if (company)
                 {
-                    if (!_installed[i])
-                    {
-                        if (_patches[i] != null) { _patches[i]!.UnpatchAll(_patches[i]!.Id); _patches[i] = null; }
-                        Install(feature);
-                    }
-                    if (!CheckOwnership(feature, force: true))
-                        throw new InvalidOperationException("The target has a conflicting patch owner.");
-                    if (!BetaPatches.IsUsable(feature)) throw new InvalidOperationException("The game schedule call was changed by another patch.");
-                    Volatile.Write(ref _state[i], "On");
-                    Volatile.Write(ref _enabled[i], true);
+                    _companyRequested = false;
+                    SetSite(BetaFeature.CompanyCommercial, enabled);
+                    SetSite(BetaFeature.CompanyIndustrial, enabled);
+                    _companyRequested = enabled && !_stopping;
                 }
-                catch (Exception error)
+                else SetSite(feature, enabled);
+            }
+        }
+
+        private void SetInactive(BetaFeature site, string state)
+        {
+            Volatile.Write(ref _enabled[(int)site], false);
+            Volatile.Write(ref _state[(int)site], state);
+        }
+
+        private void SetSite(BetaFeature feature, bool enabled)
+        {
+            int i = (int)feature;
+            if (_stopping) return;
+            Volatile.Write(ref _enabled[i], false);
+            if (!enabled) { Volatile.Write(ref _state[i], "Off"); return; }
+            if (!_compatible) { Volatile.Write(ref _state[i], "Unsupported game build"); return; }
+            if (BetaFeatures.YieldsToLocality(feature) && _localityLoaded) { Volatile.Write(ref _state[i], "Inactive while PathfindLocalityFix is loaded"); return; }
+            try
+            {
+                if (!_installed[i])
                 {
-                    Volatile.Write(ref _state[i], "Unavailable. " + error.GetBaseException().Message);
-                    try { Mod.Log.Info(feature + " beta: " + _state[i]); } catch { }
+                    if (_patches[i] != null) { _patches[i]!.UnpatchAll(_patches[i]!.Id); _patches[i] = null; }
+                    Install(feature);
                 }
+                if (!CheckOwnership(feature, force: true))
+                    throw new InvalidOperationException("The target has a conflicting patch owner.");
+                if (!BetaPatches.IsUsable(feature)) throw new InvalidOperationException("The game schedule call was changed by another patch.");
+                Volatile.Write(ref _state[i], "On");
+                Volatile.Write(ref _enabled[i], true);
+            }
+            catch (Exception error)
+            {
+                Volatile.Write(ref _state[i], "Unavailable. " + error.GetBaseException().Message);
+                try { Mod.Log.Info(feature + " beta: " + _state[i]); } catch { }
             }
         }
 
@@ -192,8 +218,8 @@ namespace ServiceCoverageFix
             if (current == null || !Volatile.Read(ref current._enabled[i]) || !current.CheckOwnership(feature)) return false;
             lock (current._gate)
             {
-                if (current._stopping || !Volatile.Read(ref current._enabled[i]) || !current.CurrentOwner(feature) || !BetaPatches.IsUsable(feature) ||
-                    (feature == BetaFeature.Route && current._routeSuperseded)) return false;
+                if (current._stopping || (BetaFeatures.IsCompany(feature) && !current._companyRequested) || !Volatile.Read(ref current._enabled[i]) || !current.CurrentOwner(feature) || !BetaPatches.IsUsable(feature) ||
+                    (BetaFeatures.YieldsToLocality(feature) && current._localityLoaded)) return false;
                 int slot = current._next;
                 current._next = (slot + 1) % current._handles.Length;
                 if (current._occupied[slot])

@@ -20,7 +20,7 @@
     <Exec Command="dotnet build &quot;$(_ScfGenerator)&quot; --artifacts-path &quot;$(_ScfGenArtifacts)&quot; -c Release --nologo -p:DecompilerDir=&quot;$(DecompilerDir)&quot;" />
     <Exec Command="dotnet &quot;$(_ScfGenArtifacts)/bin/WorkerGenerator/release/WorkerGenerator.dll&quot; &quot;$(_ScfManaged)&quot; &quot;$(_ScfGenOutput)&quot;" />
     <ItemGroup>
-      <Compile Include="$(_ScfGenOutput)/RouteBody.g.cs;$(_ScfGenOutput)/WorkerManifest.g.cs" />
+      <Compile Include="$(_ScfGenOutput)/RouteBody.g.cs;$(_ScfGenOutput)/CompanyBody.g.cs;$(_ScfGenOutput)/WorkerManifest.g.cs" />
     </ItemGroup>
   </Target>
 </Project>

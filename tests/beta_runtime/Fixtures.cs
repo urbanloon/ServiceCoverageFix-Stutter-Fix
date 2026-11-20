@@ -32,6 +32,7 @@ namespace Unity.Collections.LowLevel.Unsafe
     }
 }
 namespace Game.Simulation { public struct WaterPipeFlowJob : Unity.Jobs.IJob { public int Id; } }
+namespace Game.Buildings { public static class PropertyUtils { public struct CompanyFindPropertyJob : Unity.Jobs.IJob { public int Id; } } }
 namespace Game.Pathfind { public class PathfindQueueSystem { public struct PathfindWorkerJob : Unity.Jobs.IJob { public int Id; } } }
 namespace HarmonyLib
 {
@@ -74,10 +75,10 @@ namespace ServiceCoverageFix
     internal static class Mod { internal const string HarmonyId="coverage"; internal static readonly Logger Log=new(); internal sealed class Logger { public void Info(string s) {} } }
     internal static class BetaPatches
     {
-        private static void Housing(){} private static void Seller(){} private static void Water(){} private static void Route(){}
+        private static void Housing(){} private static void Seller(){} private static void Water(){} private static void Route(){} private static void CompanyCommercial(){} private static void CompanyIndustrial(){}
         internal static MethodInfo Validate(BetaFeature f)=>Transpiler(f);
         internal static MethodInfo Transpiler(BetaFeature f)=>typeof(BetaPatches).GetMethod(f.ToString(),BindingFlags.NonPublic|BindingFlags.Static)!;
-        private static readonly int[] Generations=new int[4];
+        private static readonly int[] Generations=new int[BetaFeatures.SiteCount];
         internal static int Generation(BetaFeature f)=>System.Threading.Volatile.Read(ref Generations[(int)f]);
         internal static void Recompose(MethodInfo target) { if(Enum.TryParse<BetaFeature>(target.Name,out var f))System.Threading.Interlocked.Increment(ref Generations[(int)f]); }
         internal static BetaFeature? OtherPublisher;
@@ -89,6 +90,7 @@ namespace ServiceCoverageFix
     internal struct OriginalSeller : Unity.Entities.IJobChunk { public int Id; }
     internal struct HousingJob : Unity.Entities.IJobChunk { public int Id; }
     internal struct SellerJob : Unity.Entities.IJobChunk { public int Id; }
+    internal struct CompanyPropertyJob : Unity.Jobs.IJob { public Game.Buildings.PropertyUtils.CompanyFindPropertyJob Source; }
     internal struct RouteJob : Unity.Jobs.IJob { public int Id; }
     internal struct WaterJob : Unity.Jobs.IJob { public int Id; }
     internal static class WaterFlowSchedule { internal static Unity.Jobs.JobHandle Schedule(Game.Simulation.WaterPipeFlowJob job,Unity.Jobs.JobHandle dependency)=>Recorder.Record(new WaterJob{Id=job.Id},0,dependency); }
@@ -97,6 +99,6 @@ namespace ServiceCoverageFix
         internal static readonly List<(Type type,int id,int query,Unity.Jobs.JobHandle dependency,Unity.Jobs.Work work)> Calls=new();
         internal static bool Fail;
         internal static Unity.Jobs.JobHandle Record<T>(T job,int query,Unity.Jobs.JobHandle dep) where T:struct
-        { var w=new Unity.Jobs.Work();Calls.Add((typeof(T),(int)typeof(T).GetField("Id")!.GetValue(job)!,query,dep,w));if(Fail)throw new Exception("scheduler");return new Unity.Jobs.JobHandle{Work=w}; }
+        { var w=new Unity.Jobs.Work();Calls.Add((typeof(T),job is CompanyPropertyJob company ? company.Source.Id : (int)typeof(T).GetField("Id")!.GetValue(job)!,query,dep,w));if(Fail)throw new Exception("scheduler");return new Unity.Jobs.JobHandle{Work=w}; }
     }
 }

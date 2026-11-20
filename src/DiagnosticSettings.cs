@@ -43,11 +43,11 @@ namespace ServiceCoverageFix
 
 #if SCF_BETA
         private Mod? _betaOwner;
-        private readonly bool[] _requested = new bool[4];
+        private readonly bool[] _requested = new bool[BetaFeatures.Options.Length];
         internal void BindBeta(Mod owner)
         {
             _betaOwner = owner;
-            foreach (BetaFeature feature in System.Enum.GetValues(typeof(BetaFeature)))
+            foreach (BetaFeature feature in BetaFeatures.Options)
                 if (_requested[(int)feature]) owner.ChangeBeta(feature, true);
         }
         private void Set(BetaFeature feature, bool value)
@@ -55,6 +55,13 @@ namespace ServiceCoverageFix
             _requested[(int)feature] = value;
             _betaOwner?.ChangeBeta(feature, value);
         }
+        [SettingsUISection("Beta")]
+        [SettingsUIMultilineText]
+        [SettingsUIDisplayName(typeof(DiagnosticSettings), nameof(BetaCompatibilityText))]
+        public string BetaCompatibility => "These beta options may be incompatible with Big City Performance.";
+
+        public LocalizedString BetaCompatibilityText() => LocalizedString.Value(BetaCompatibility);
+
         [SettingsUISection("Beta")]
         public bool HousingSearch { get => _requested[(int)BetaFeature.Housing]; set => Set(BetaFeature.Housing, value); }
         [SettingsUISection("Beta")]
@@ -64,12 +71,16 @@ namespace ServiceCoverageFix
         [SettingsUISection("Beta")]
         public bool RouteSearch { get => _requested[(int)BetaFeature.Route]; set => Set(BetaFeature.Route, value); }
         [SettingsUISection("Beta")]
-        public string BetaStatus => string.Join(" | ", System.Array.ConvertAll((BetaFeature[])System.Enum.GetValues(typeof(BetaFeature)), f => f + " " + (_betaOwner?.BetaStatus(f) ?? "Off")));
+        public bool CompanyPropertySearch { get => _requested[(int)BetaFeature.CompanyCommercial]; set => Set(BetaFeature.CompanyCommercial, value); }
+        [SettingsUISection("Beta")]
+        public string BetaStatus => string.Join(" | ", System.Array.ConvertAll(BetaFeatures.Options, f => BetaFeatures.IsCompany(f)
+            ? "Company property search (commercial: " + (_betaOwner?.BetaStatus(BetaFeature.CompanyCommercial) ?? "Off") + ", industrial: " + (_betaOwner?.BetaStatus(BetaFeature.CompanyIndustrial) ?? "Off") + ")"
+            : f + " " + (_betaOwner?.BetaStatus(f) ?? "Off")));
 #endif
         public override void SetDefaults()
         {
 #if SCF_BETA
-            HousingSearch = ResourceSellerSearch = WaterFlow = RouteSearch = false;
+            HousingSearch = ResourceSellerSearch = WaterFlow = RouteSearch = CompanyPropertySearch = false;
 #endif
         }
     }
@@ -97,14 +108,18 @@ namespace ServiceCoverageFix
                 { _settings.GetOptionTabLocaleID("Diagnostics"), "Diagnostics" },
 #if SCF_BETA
                 { _settings.GetOptionTabLocaleID("Beta"), "Beta options" },
+                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.BetaCompatibility)), "Beta compatibility" },
+                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.BetaCompatibility)), "Compatibility with other performance mods." },
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.HousingSearch)), "Housing search" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.HousingSearch)), "Reuse household income and support checks when comparing homes." },
+                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.HousingSearch)), "Check the same homes and shelters using vanilla rules. Reuse household income and support checks when comparing available homes." },
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.ResourceSellerSearch)), "Resource-seller search" },
                 { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.ResourceSellerSearch)), "Reuse resource data when businesses search for a seller." },
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.WaterFlow)), "Water flow" },
                 { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.WaterFlow)), "Speed up pressure and flow calculations in water and sewage pipes." },
+                { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.CompanyPropertySearch)), "Company property search" },
+                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.CompanyPropertySearch)), "Reuse renter data while commercial and industrial companies compare available properties." },
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.RouteSearch)), "Route search" },
-                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.RouteSearch)), "Speed up large route searches. Yields to PathfindLocalityFix when loaded." },
+                { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.RouteSearch)), "Speed up large route searches using the game's route costs and priorities." },
                 { _settings.GetOptionLabelLocaleID(nameof(DiagnosticSettings.BetaStatus)), "Beta worker status" },
                 { _settings.GetOptionDescLocaleID(nameof(DiagnosticSettings.BetaStatus)), "Shows whether each requested worker is available in this session." },
 #endif

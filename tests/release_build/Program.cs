@@ -15,7 +15,7 @@ AssemblyLoadContext.Default.Resolving += (context, name) => {
 };
 var game = Assembly.LoadFrom(Path.Combine(managed, "Game.dll"));
 var mod = Assembly.LoadFrom(Path.GetFullPath(args[1]));
-Require(mod.GetName().Version == new Version(0, 4, 0, 0), "release assembly version");
+Require(mod.GetName().Version == new Version(0, 4, 1, 0), "release assembly version");
 var pdb = Path.ChangeExtension(mod.Location, ".pdb");
 if (File.Exists(pdb))
 {
@@ -38,23 +38,32 @@ var verify = manifest.GetMethods(all).Single(m => m.Name == "Validate" && m.GetP
 var patches = mod.GetType("ServiceCoverageFix.BetaPatches", true)!;
 var enabled = patches.GetMethod("IsUsable", all)!;
 var originals = (Type?[])patches.GetField("Originals", all)!.GetValue(null)!;
+var registration = Reader.Read(patches.GetMethod("Validate", all)!,
+    new DynamicMethod("ReadProducerRegistration", typeof(void), Type.EmptyTypes).GetILGenerator(), inspectOnly: true)
+    .Where(instruction => instruction.opcode == OpCodes.Call && instruction.operand is MethodInfo method &&
+        method.IsGenericMethod && method.Name == "EarlyJobInit")
+    .Select(instruction => ((MethodInfo)instruction.operand).GetGenericArguments().Single()).ToArray();
 var assemblyHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(game.Location))).ToLowerInvariant();
 foreach (var (feature, owner, factory, sourceName, workerName) in new[] {
     ("Housing", "Game.Simulation.CitizenPathfindSetup", "SetupFindHome", "Game.Simulation.CitizenPathfindSetup+SetupFindHomeJob", "HousingJob"),
     ("Seller", "Game.Simulation.ResourcePathfindSetup", "SetupResourceSeller", "Game.Simulation.ResourcePathfindSetup+SetupResourceSellerJob", "SellerJob"),
     ("Water", "Game.Simulation.WaterPipeFlowSystem", "ScheduleFlowJob", "Game.Simulation.WaterPipeFlowJob", "OptimizedWaterFlowJob"),
-    ("Route", "Game.Pathfind.PathfindQueueSystem", "ScheduleWorkerJobs", "Game.Pathfind.PathfindQueueSystem+PathfindWorkerJob", "RouteJob")
+    ("Route", "Game.Pathfind.PathfindQueueSystem", "ScheduleWorkerJobs", "Game.Pathfind.PathfindQueueSystem+PathfindWorkerJob", "RouteJob"),
+    ("CompanyCommercial", "Game.Simulation.CommercialFindPropertySystem", "OnUpdate", "Game.Buildings.PropertyUtils+CompanyFindPropertyJob", "CompanyPropertyJob"),
+    ("CompanyIndustrial", "Game.Simulation.IndustrialFindPropertySystem", "OnUpdate", "Game.Buildings.PropertyUtils+CompanyFindPropertyJob", "CompanyPropertyJob")
 })
 {
     var f = Enum.Parse(featureType, feature);
     verify.Invoke(null, new[] { f, assemblyHash });
     var stock = game.GetType(sourceName, true)!;
     var mirror = mod.GetType("ServiceCoverageFix." + workerName, true)!;
+    Require(registration.Count(type => type == mirror) == 1, "missing concrete producer registration: " + feature);
     var sourceFields = stock.GetFields(fields);
-    if (feature == "Water")
+    if (feature is "Water" or "CompanyCommercial" or "CompanyIndustrial")
     {
         var inner = mirror.GetFields(fields).Single();
-        Require(inner.FieldType == stock && Offset(inner) == 0 && Size(stock) == Size(mirror), "stock water job in replacement");
+        if (feature.StartsWith("Company")) Require(inner.Name == "Source", "stock company field name");
+        Require(inner.FieldType == stock && Offset(inner) == 0 && Size(stock) == Size(mirror), "stock job in replacement: " + feature);
     }
     else
     {
@@ -112,8 +121,9 @@ foreach (var (feature, owner, factory, sourceName, workerName) in new[] {
     {
         var invalid = code.Select(i => new CodeInstruction(i)).ToList();
         if (duplicate) invalid.Insert(site, new CodeInstruction(code[site])); else invalid.RemoveAt(site);
+        var expected = invalid.Select(i => (i.opcode, i.operand)).ToArray();
         var result = Transform(invalid);
-        Require(!(bool)enabled.Invoke(null, new[] { f })! && result.SequenceEqual(invalid), "changed caller should retain stock");
+        Require(!(bool)enabled.Invoke(null, new[] { f })! && result.Select(i => (i.opcode, i.operand)).SequenceEqual(expected), "changed caller should retain stock");
     }
     Console.WriteLine($"{feature} passed: {sourceFields.Length} stock fields, worker {Size(mirror)} B{wrapperBytes}, genuine Harmony stream and serialized bridge, JIT, two invalid callers");
 }

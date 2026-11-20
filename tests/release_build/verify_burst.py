@@ -17,7 +17,7 @@ parser.add_argument("--dotnet", default="dotnet", help=".NET 10 runtime host")
 parser.add_argument("--target", choices=["X64_SSE4", "AVX2"], action="append")
 args = parser.parse_args()
 runtime = args.burst_runtime.resolve()
-required = {"OptimizedApplyCoverageJob", "SellerJob", "HousingJob", "RouteJob", "OptimizedWaterFlowJob"}
+required = {"OptimizedApplyCoverageJob", "SellerJob", "HousingJob", "RouteJob", "OptimizedWaterFlowJob", "CompanyPropertyJob"}
 for target in (args.target or ["X64_SSE4", "AVX2"]):
     output = args.output.resolve() / target
     output.mkdir(parents=True, exist_ok=False)

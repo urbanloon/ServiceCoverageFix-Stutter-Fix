@@ -15,21 +15,73 @@ namespace ServiceCoverageFix
             BetaFeature.Housing => BetaSchedule.Housing(new OriginalHousing{Id=id},new EntityQuery{Id=7},dep),
             BetaFeature.Seller => BetaSchedule.Seller(new OriginalSeller{Id=id},new EntityQuery{Id=7},dep),
             BetaFeature.Water => BetaSchedule.Water(new Game.Simulation.WaterPipeFlowJob{Id=id},dep),
+            BetaFeature.CompanyCommercial => BetaSchedule.CompanyCommercial(new Game.Buildings.PropertyUtils.CompanyFindPropertyJob{Id=id},dep),
+            BetaFeature.CompanyIndustrial => BetaSchedule.CompanyIndustrial(new Game.Buildings.PropertyUtils.CompanyFindPropertyJob{Id=id},dep),
             _ => BetaSchedule.Route(new Game.Pathfind.PathfindQueueSystem.PathfindWorkerJob{Id=id},dep) };
-        static Type[] custom={typeof(HousingJob),typeof(SellerJob),typeof(WaterJob),typeof(RouteJob)};
-        static Type[] stock={typeof(OriginalHousing),typeof(OriginalSeller),typeof(Game.Simulation.WaterPipeFlowJob),typeof(Game.Pathfind.PathfindQueueSystem.PathfindWorkerJob)};
+        static Type[] custom={typeof(HousingJob),typeof(SellerJob),typeof(WaterJob),typeof(RouteJob),typeof(CompanyPropertyJob),typeof(CompanyPropertyJob)};
+        static Type[] stock={typeof(OriginalHousing),typeof(OriginalSeller),typeof(Game.Simulation.WaterPipeFlowJob),typeof(Game.Pathfind.PathfindQueueSystem.PathfindWorkerJob),typeof(Game.Buildings.PropertyUtils.CompanyFindPropertyJob),typeof(Game.Buildings.PropertyUtils.CompanyFindPropertyJob)};
         static void Masks()
         {
-            for(int mask=0;mask<16;mask++){
+            for(int mask=0;mask<32;mask++){
                 var rt=new BetaRuntime(BetaRuntime.GameHash);var dep=new JobHandle{Work=new Work()};
-                foreach(BetaFeature f in Enum.GetValues<BetaFeature>()) rt.Set(f,(mask&(1<<(int)f))!=0);
+                foreach(BetaFeature f in BetaFeatures.Options) rt.Set(f,(mask&(1<<(int)f))!=0);
                 var before=Recorder.Calls.Count;
                 foreach(BetaFeature f in Enum.GetValues<BetaFeature>()){
-                    int i=(int)f;bool on=(mask&(1<<i))!=0;var h=Submit(f,dep,200+i);var call=Recorder.Calls[^1];
+                    int i=(int)f;bool on=(mask&(1<<Math.Min(i,4)))!=0;var h=Submit(f,dep,200+i);var call=Recorder.Calls[^1];
                     Check(call.type==(on?custom:stock)[i] && call.id==200+i && call.query==(i<2?7:0) && call.dependency.Work==dep.Work && h.Work==call.work && !h.IsCompleted,"dispatch "+mask+"/"+f);
                 }
-                Check(Recorder.Calls.Count==before+4,"multiple submissions"); rt.Dispose();
-                for(int i=0;i<4;i++)Check(Recorder.Calls[before+i].work.Done==((mask&(1<<i))!=0),"owned handle");
+                Check(Recorder.Calls.Count==before+BetaFeatures.SiteCount,"multiple submissions"); rt.Dispose();
+                for(int i=0;i<BetaFeatures.SiteCount;i++)Check(Recorder.Calls[before+i].work.Done==((mask&(1<<Math.Min(i,4)))!=0),"owned handle");
+            }
+        }
+        static void CompanyOwnership()
+        {
+            var installing = new BetaRuntime(BetaRuntime.GameHash);
+            int duringInstall = 0;
+            Harmony.BeforePublish = () =>
+            {
+                foreach (var site in new[] { BetaFeature.CompanyCommercial, BetaFeature.CompanyIndustrial })
+                {
+                    Submit(site, default, 1);
+                    Check(Recorder.Calls[^1].type == stock[(int)site], "company became active before both installs completed");
+                    duringInstall++;
+                }
+            };
+            try { installing.Set(BetaFeature.CompanyCommercial, true); }
+            finally { Harmony.BeforePublish = null; }
+            Check(duringInstall == 4, "both physical installations should publish independently");
+            installing.Dispose();
+            foreach (var blocked in new[] {BetaFeature.CompanyCommercial, BetaFeature.CompanyIndustrial})
+            {
+                var other = blocked == BetaFeature.CompanyCommercial ? BetaFeature.CompanyIndustrial : BetaFeature.CompanyCommercial;
+                var target = BetaPatches.Transpiler(blocked);
+                var foreign = new Harmony("company.foreign");
+                foreign.Patch(target, new HarmonyMethod(target));
+                var rt = new BetaRuntime(BetaRuntime.GameHash);
+                rt.Set(BetaFeature.CompanyCommercial, true);
+                void Dispatch(BetaFeature site, bool accelerated)
+                {
+                    Submit(site, default, (int)site);
+                    Check(Recorder.Calls[^1].type == (accelerated ? custom : stock)[(int)site], "company dispatch " + site);
+                }
+                Dispatch(blocked, false); Dispatch(other, true);
+                Check(rt.Status(blocked).StartsWith("Unavailable") && rt.Status(other) == "On", "partial initial availability");
+                foreign.UnpatchAll(foreign.Id);
+                rt.Set(BetaFeature.CompanyCommercial, true);
+                Dispatch(blocked, true);
+                BetaPatches.Invalidated = blocked;
+                Dispatch(blocked, false); Dispatch(other, true);
+                Check(rt.Status(blocked).Contains("schedule call changed") && rt.Status(other) == "On", "changed company site");
+                BetaPatches.Invalidated = null;
+                foreign.Patch(target, new HarmonyMethod(target));
+                Dispatch(blocked, false); Dispatch(other, true);
+                Check(rt.Status(blocked).StartsWith("Inactive") && rt.Status(other) == "On", "partial late conflict");
+                rt.Set(BetaFeature.CompanyCommercial, false);
+                Dispatch(blocked, false); Dispatch(other, false);
+                Check(rt.Status(blocked) == "Off" && rt.Status(other) == "Off", "company off");
+                rt.Dispose();
+                Check(Harmony.GetPatchInfo(target)!.Owners.SequenceEqual(new[]{foreign.Id}), "company removed third-party patch");
+                foreign.UnpatchAll(foreign.Id);
             }
         }
         static void LateOwnership()
@@ -157,20 +209,52 @@ namespace ServiceCoverageFix
             rt=new BetaRuntime(BetaRuntime.GameHash);rt.Set(BetaFeature.Water,true);int count=Recorder.Calls.Count;
             Recorder.Fail=true;try{Submit(BetaFeature.Water,default,0);throw new Exception("scheduler failure swallowed");}catch(Exception e)when(e.Message=="scheduler"){}Recorder.Fail=false;
             Check(Recorder.Calls.Count==count+1,"ambiguous submission duplicated");rt.Dispose();
-            rt=new BetaRuntime(BetaRuntime.GameHash);rt.Set(BetaFeature.Route,true);var last=Submit(BetaFeature.Route,default,2);
+            rt = new BetaRuntime(BetaRuntime.GameHash);
+            rt.Set(BetaFeature.Route, true);
+            var route = Submit(BetaFeature.Route, default, 2);
+            rt.Set(BetaFeature.CompanyCommercial, true);
+            var commercial = Submit(BetaFeature.CompanyCommercial, default, 20);
+            var industrial = Submit(BetaFeature.CompanyIndustrial, default, 21);
             AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("PathfindLocalityFix"), AssemblyBuilderAccess.Run);
-            Submit(BetaFeature.Route,default,3);Check(Recorder.Calls[^1].type==stock[3] && !last.IsCompleted,"late route conflict");rt.Dispose();Check(last.IsCompleted,"route drain");
+            var localSites = new[] { BetaFeature.Route, BetaFeature.CompanyCommercial, BetaFeature.CompanyIndustrial };
+            foreach (var site in localSites)
+            {
+                Submit(site, default, 30);
+                Check(Recorder.Calls[^1].type == stock[(int)site] && rt.Status(site).Contains("PathfindLocalityFix"), "late locality conflict: " + site);
+            }
+            Check(!route.IsCompleted && !commercial.IsCompleted && !industrial.IsCompleted, "early locality drain");
+            rt.Dispose();
+            Check(route.IsCompleted && commercial.IsCompleted && industrial.IsCompleted, "locality drain");
+
+            rt = new BetaRuntime(BetaRuntime.GameHash);
+            rt.Set(BetaFeature.Route, true);
+            rt.Set(BetaFeature.CompanyCommercial, true);
+            foreach (var site in localSites)
+            {
+                Submit(site, default, 40);
+                Check(Recorder.Calls[^1].type == stock[(int)site] && rt.Status(site).Contains("PathfindLocalityFix"), "existing locality conflict: " + site);
+            }
+            rt.Dispose();
         }
         static void Manifests()
         {
             var ids=BetaManifest.ReviewedModules; string p=BetaManifest.Prefix;
             var entries=ids.ToDictionary(k=>p+"Module."+k.Key,k=>k.Value.ToString());entries[p+"GameSha256"]=BetaRuntime.GameHash;
-            foreach(BetaFeature f in Enum.GetValues<BetaFeature>())entries[p+f]="v1";
+            foreach(BetaFeature f in Enum.GetValues<BetaFeature>())entries[p+BetaFeatures.ManifestName(f)]="v1";
             foreach(BetaFeature f in Enum.GetValues<BetaFeature>())BetaManifest.Validate(f,BetaRuntime.GameHash,entries,n=>ids[n]);
+            entries.Remove(p + "Company");
+            foreach (var site in Enum.GetValues<BetaFeature>())
+            {
+                bool missing = false;
+                try { BetaManifest.Validate(site, BetaRuntime.GameHash, entries, n => ids[n]); }
+                catch (InvalidOperationException) { missing = true; }
+                Check(missing == BetaFeatures.IsCompany(site), "company manifest affected wrong site: " + site);
+            }
+            entries[p + "Company"] = "v1";
             foreach(var m in ids.Keys){bool failed=false;try{BetaManifest.Validate(BetaFeature.Route,BetaRuntime.GameHash,entries,n=>n==m?Guid.Empty:ids[n]);}catch(InvalidOperationException){failed=true;}Check(failed,"runtime identity "+m);}
             entries[p+"Module.Unity.Entities"]=Guid.NewGuid().ToString();bool rejected=false;
             try{BetaManifest.Validate(BetaFeature.Housing,BetaRuntime.GameHash,entries,n=>Guid.Parse(entries[p+"Module."+n]));}catch(InvalidOperationException){rejected=true;}Check(rejected,"matching unreviewed build/runtime");
         }
-        public static void Main(){Manifests();Masks();LateOwnership();DuringPublication();ForeignPublishingDuringManagement(false);ForeignPublishingDuringManagement(true);Failures();Console.WriteLine("PASS 16 toggle combinations, original inputs and handles, ten ABI mismatch controls, unsupported build, concurrent foreign publication/toggle/unload, ring saturation, scheduler exception, retryable drain/unpatch and late route conflict");}
+        public static void Main(){Manifests();Masks();CompanyOwnership();LateOwnership();DuringPublication();ForeignPublishingDuringManagement(false);ForeignPublishingDuringManagement(true);Failures();Console.WriteLine("PASS 32 toggle combinations across six sites, partial company ownership, original inputs and handles, ten ABI mismatch controls, unsupported build, concurrent foreign publication/toggle/unload, ring saturation, scheduler exception, retryable drain/unpatch and late route and company conflicts");}
     }
 }

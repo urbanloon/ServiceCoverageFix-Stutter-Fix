@@ -20,12 +20,12 @@ namespace ServiceCoverageFix
     internal static class BetaPatches
     {
         private const BindingFlags All = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
-        private static readonly int[] Sites = new int[4];
-        private static readonly int[] Generations = new int[4];
-        private static readonly int[] OtherPublisher = new int[4];
+        private static readonly int[] Sites = new int[BetaFeatures.SiteCount];
+        private static readonly int[] Generations = new int[BetaFeatures.SiteCount];
+        private static readonly int[] OtherPublisher = new int[BetaFeatures.SiteCount];
         internal static bool SharesPublisher(BetaFeature feature) => Volatile.Read(ref OtherPublisher[(int)feature]) == 0;
         internal static int Generation(BetaFeature feature) => Volatile.Read(ref Generations[(int)feature]);
-        private static readonly Type?[] Originals = new Type?[4];
+        private static readonly Type?[] Originals = new Type?[BetaFeatures.SiteCount];
         internal static bool IsUsable(BetaFeature feature) => Volatile.Read(ref Sites[(int)feature]) == 1;
         internal static MethodInfo Transpiler(BetaFeature feature) => typeof(BetaPatches).GetMethod(feature.ToString(), All)!;
 
@@ -48,6 +48,11 @@ namespace ServiceCoverageFix
                 case BetaFeature.Route:
                     systemName = "Game.Pathfind.PathfindQueueSystem"; jobName = systemName + "+PathfindWorkerJob";
                     methodName = "ScheduleWorkerJobs"; worker = typeof(RouteJob); break;
+                case BetaFeature.CompanyCommercial:
+                case BetaFeature.CompanyIndustrial:
+                    systemName = feature == BetaFeature.CompanyCommercial ? "Game.Simulation.CommercialFindPropertySystem" : "Game.Simulation.IndustrialFindPropertySystem";
+                    jobName = typeof(Game.Buildings.PropertyUtils.CompanyFindPropertyJob).FullName;
+                    methodName = "OnUpdate"; worker = typeof(CompanyPropertyJob); break;
                 default: throw new ArgumentOutOfRangeException(nameof(feature));
             }
             var game = typeof(Game.UpdateSystem).Assembly;
@@ -68,6 +73,14 @@ namespace ServiceCoverageFix
                         throw new InvalidOperationException("Unsupported route heap layout or collection build.");
             }
             if (feature == BetaFeature.Water) WaterFlowSchedule.Validate();
+            else if (BetaFeatures.IsCompany(feature))
+            {
+                var fields = worker.GetFields(All).Where(f => !f.IsStatic).ToArray();
+                if (IntPtr.Size != 8 || fields.Length != 1 || fields[0].Name != nameof(CompanyPropertyJob.Source) ||
+                    fields[0].FieldType != source || UnsafeUtility.GetFieldOffset(fields[0]) != 0 ||
+                    UnsafeUtility.SizeOf<CompanyPropertyJob>() != UnsafeUtility.SizeOf<Game.Buildings.PropertyUtils.CompanyFindPropertyJob>())
+                    throw new InvalidOperationException("Unsupported company property job layout.");
+            }
             else typeof(BetaPatches).GetMethod(nameof(ValidateMirror), All)!
                 .MakeGenericMethod(source, worker).Invoke(null, null);
             // Register the concrete producer before an enabled bridge can submit anything.
@@ -78,6 +91,8 @@ namespace ServiceCoverageFix
                 case BetaFeature.Seller: JobChunkExtensions.EarlyJobInit<SellerJob>(); break;
                 case BetaFeature.Water: IJobExtensions.EarlyJobInit<OptimizedWaterFlowJob>(); break;
                 case BetaFeature.Route: IJobExtensions.EarlyJobInit<RouteJob>(); break;
+                case BetaFeature.CompanyCommercial:
+                case BetaFeature.CompanyIndustrial: IJobExtensions.EarlyJobInit<CompanyPropertyJob>(); break;
             }
             Originals[(int)feature] = source;
             Volatile.Write(ref Sites[(int)feature], 0);
@@ -111,6 +126,9 @@ namespace ServiceCoverageFix
         private static IEnumerable<CodeInstruction> Seller(IEnumerable<CodeInstruction> instructions) => Replace(BetaFeature.Seller, instructions);
         private static IEnumerable<CodeInstruction> Water(IEnumerable<CodeInstruction> instructions) => Replace(BetaFeature.Water, instructions);
         private static IEnumerable<CodeInstruction> Route(IEnumerable<CodeInstruction> instructions) => Replace(BetaFeature.Route, instructions);
+
+        private static IEnumerable<CodeInstruction> CompanyCommercial(IEnumerable<CodeInstruction> instructions) => Replace(BetaFeature.CompanyCommercial, instructions);
+        private static IEnumerable<CodeInstruction> CompanyIndustrial(IEnumerable<CodeInstruction> instructions) => Replace(BetaFeature.CompanyIndustrial, instructions);
 
         private static IEnumerable<CodeInstruction> Replace(BetaFeature f, IEnumerable<CodeInstruction> instructions)
         {
