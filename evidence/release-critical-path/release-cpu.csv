@@ -1,0 +1,37 @@
+capture,activity,cpu_samples,mapped_game_or_mod_leaf,entry_thread_samples
+C08,Other or unresolved activity,625712,445385,24344
+C08,Replacement Apply,111,111,0
+C08,Other pathfinding dispatcher work,110,67,0
+C08,Coverage graph,37887,37812,0
+C08,Ordinary route,706382,706290,0
+C08,Availability,512,511,0
+C08,Coverage result conversion,6247,6232,0
+C08,Procedural rendering preparation,2648,2042,0
+C08,Citizen happiness,33897,33786,0
+C08,Company data count,6048,6016,0
+C08,Household citizen count,6579,6400,0
+C08,Pathfinding target dequeue,1007,796,0
+C08,Resource seller setup,185776,185698,0
+C08,Stock Apply,0,0,0
+C08,Coverage Clear,23,9,0
+C08,Coverage Prepare,1,1,0
+C08,Coverage Process,763,763,0
+C08,Coverage search setup,131,117,0
+C09,Other or unresolved activity,2362148,1683940,89098
+C09,Replacement Apply,599,599,0
+C09,Other pathfinding dispatcher work,493,356,0
+C09,Coverage graph,201538,201164,11
+C09,Ordinary route,2333358,2332991,168
+C09,Availability,2824,2819,0
+C09,Coverage result conversion,31935,31851,3
+C09,Procedural rendering preparation,9366,7216,5
+C09,Citizen happiness,185757,185251,20
+C09,Company data count,32475,32239,4
+C09,Household citizen count,36596,35648,2
+C09,Pathfinding target dequeue,3884,2707,4
+C09,Resource seller setup,760596,760308,127
+C09,Stock Apply,0,0,0
+C09,Coverage Clear,98,39,0
+C09,Coverage Prepare,16,16,0
+C09,Coverage Process,4463,4457,0
+C09,Coverage search setup,683,607,0

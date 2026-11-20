@@ -38,3 +38,14 @@ for mode in preserve daz ftz daz-ftz; do
     dotnet run -c Release --project tests/burst_compare -- "$GAME_MANAGED" out/candidate --require-nan
 done
 ```
+
+### Compare native diagnostics with a stock visit count on every fixture
+
+The visit-order runner accepts an optional third argument naming an output CSV. It writes one row per fixture with the label and the number of individual stock visits observed by its IL probe. The two runners share the same fixture enumeration. Use the matching game, candidate and default floating-point mode for both commands.
+
+```bash
+dotnet run -c Release --project tests/visit_order -p:GameManagedPath="$GAME_MANAGED" -- "$GAME_MANAGED" "$CANDIDATE_DLL" out/stock-visits.csv
+CS2_BURST_WORKLOAD_ORACLE="$PWD/out/stock-visits.csv" dotnet run -c Release --project tests/burst_compare -- "$GAME_MANAGED" out/candidate --require-nan
+```
+
+The native runner compares processed elements to the instrumented stock count and derives active providers, available elements and reserved entries from the original input ranges. Each case also compares the native stock and candidate target bit patterns and checks input elements and buffer guards. This suite includes all 729 placements of three priority values (−1, +1, NaN) in three two-element streams, five priority/filtering patterns at 30 provider counts through 1,052, and 320 small-queue boundary fixtures.

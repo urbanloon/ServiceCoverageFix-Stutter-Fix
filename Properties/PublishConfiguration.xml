@@ -65,11 +65,11 @@ P.S. If you're curious about the computer-science idea behind why changing an al
 	<Tag Value="Code Mod" />
 
 	<!-- Version -->
-	<ModVersion Value="0.3.5" />
+	<ModVersion Value="0.3.6" />
 	<GameVersion Value="*" />
 
-	<!-- Candidate changes from version 0.3.4 -->
-	<ChangeLog Value="Optimizes the final coverage merge for the simulation and the tool/infoview preview. Adds separate per-service provider and element counts for both. Handles unordered coverage priorities, verifies compatible game code before patching, and improves cleanup after partial failures." />
+	<!-- Candidate changes from version 0.3.5 -->
+	<ChangeLog Value="Fixes the display of live simulation and preview workloads in Options. Speeds up small coverage updates and the large-provider merge used in park-heavy cities. Shows why coverage is inactive on an incompatible game build and improves cleanup when the optional load notification is unavailable." />
 
 	<!-- Supported values: Public, Private, Unlisted -->
 	<AccessLevel Value="Public" />

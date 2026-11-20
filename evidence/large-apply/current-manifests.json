@@ -1,0 +1,56 @@
+{
+  "base-AVX2": {
+    "sourceSha256": "ec0f1babf3bda04a71bb81808858112c25816111605ebb48a9628b2b5a2b48ce",
+    "kind": "mod",
+    "gameSha256": "f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745",
+    "symbol": "5aa516e4d347eb4f49f4ec58963bdccb",
+    "binarySha256": "55c35795881e09ae8068e368c78abbff01489043a6f12be90f1e75bf22d94820",
+    "platform": "Linux",
+    "target": "AVX2"
+  },
+  "inline-AVX2": {
+    "sourceSha256": "c8935745bbe77975d22aee9b9821076b1833f477188f55d896359c8ced1bcf3f",
+    "kind": "mod",
+    "gameSha256": "f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745",
+    "symbol": "5aa516e4d347eb4f49f4ec58963bdccb",
+    "binarySha256": "68e9bf5ad89145a43e9400eb6a685628d25e6c45dafe9cf315f1c462c1d127d5",
+    "platform": "Linux",
+    "target": "AVX2"
+  },
+  "vanilla-AVX2": {
+    "sourceSha256": "f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745",
+    "kind": "vanilla",
+    "gameSha256": "f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745",
+    "symbol": "A18651BD19F0B489",
+    "binarySha256": "b5648bd6dde33fa29a343c05144bc2d70e7b4ff4d163913b4de99b7ec505a20b",
+    "platform": "Linux",
+    "target": "AVX2"
+  },
+  "base-X64_SSE4": {
+    "sourceSha256": "ec0f1babf3bda04a71bb81808858112c25816111605ebb48a9628b2b5a2b48ce",
+    "kind": "mod",
+    "gameSha256": "f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745",
+    "symbol": "5aa516e4d347eb4f49f4ec58963bdccb",
+    "binarySha256": "cf6f0eaeda3918763269af86d7d47a9445458fbbfd69525042ddb1b0b9763b23",
+    "platform": "Linux",
+    "target": "X64_SSE4"
+  },
+  "inline-X64_SSE4": {
+    "sourceSha256": "c8935745bbe77975d22aee9b9821076b1833f477188f55d896359c8ced1bcf3f",
+    "kind": "mod",
+    "gameSha256": "f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745",
+    "symbol": "5aa516e4d347eb4f49f4ec58963bdccb",
+    "binarySha256": "a10ed1f502f0e9532f8980c4c3d2e609f5743e0cbde0e1f92778b6b7ad8b3d04",
+    "platform": "Linux",
+    "target": "X64_SSE4"
+  },
+  "vanilla-X64_SSE4": {
+    "sourceSha256": "f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745",
+    "kind": "vanilla",
+    "gameSha256": "f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745",
+    "symbol": "A18651BD19F0B489",
+    "binarySha256": "3cbe8744bb29ecb9ed507bbf311537399cb4b40257d526870dad91e5454f2f82",
+    "platform": "Linux",
+    "target": "X64_SSE4"
+  }
+}

@@ -69,6 +69,8 @@ internal sealed class Jobs
         Vanilla = Load(vanilla, "vanilla");
         Candidate = Load(candidate, "mod");
         if (baseline != null) Baseline = Load(baseline, null);
+        string? oraclePath = Environment.GetEnvironmentVariable("CS2_BURST_WORKLOAD_ORACLE");
+        if (oraclePath != null) WorkloadOracle.Verify(this, oraclePath);
         if (Environment.GetCommandLineArgs().Contains("--shapes")) ShapeTimings.Run(this);
         if (Environment.GetCommandLineArgs().Contains("--budget"))
             BudgetFixture.Run(this, (NativeWorker)Candidate.Target!);

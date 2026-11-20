@@ -15,15 +15,20 @@ namespace ServiceCoverageFix
     public sealed class Mod : IMod
     {
         internal const string HarmonyId = "com.servicecoveragefix.applycoverage.byteradix";
-        internal static readonly ILog Log = LogManager
-            .GetLogger("ServiceCoverageFix")
-            .SetShowsErrorsInUI(true);
+        private static class Logger
+        {
+            internal static readonly ILog Instance = LogManager.GetLogger("ServiceCoverageFix").SetShowsErrorsInUI(true);
+        }
+        internal static ILog Log => Logger.Instance;
 
         private static Mod? _owner;
+        private string? _compatibilityInactiveReason;
+        internal static string? CompatibilityInactiveReason =>
+            Volatile.Read(ref _owner)?._compatibilityInactiveReason;
         private Harmony? _harmony;
         private DiagnosticSettings? _settings;
         private DiagnosticLocale? _diagnosticLocale;
-        private Game.SceneFlow.GameManager? _loadEvents;
+        private Action? _stopTrackingGameLoads;
         internal bool IsOwner => ReferenceEquals(Volatile.Read(ref _owner), this);
 
         // Callable by diagnostic tools without parsing logs. Counters refer only
@@ -35,9 +40,20 @@ namespace ServiceCoverageFix
             // A second instance must never remove the first instance's patch or
             // free diagnostics still in use, including during retryable teardown.
             if (Interlocked.CompareExchange(ref _owner, this, null) != null) return;
+            _compatibilityInactiveReason = null;
             try
             {
-                CompatibilityGate.Validate();
+                try { CompatibilityGate.Validate(); }
+                catch (CoverageContractMismatch mismatch)
+                {
+                    // The gate runs before any patch or worker allocation. Keep
+                    // the Options panel available to explain this checked state.
+                    _compatibilityInactiveReason = "Inactive. " + mismatch.Message;
+                    RuntimeDiagnostics.Initialize(allocateWorkerSlot: false);
+                    RegisterDiagnosticsPanel();
+                    try { Log.Info("ServiceCoverageFix " + _compatibilityInactiveReason); } catch { }
+                    return;
+                }
                 ApplyCoverageScheduleBridge.ValidateBridge(CompatibilityGate.ApplyCoverageJobType);
                 RuntimeDiagnostics.Initialize();
 
@@ -63,6 +79,18 @@ namespace ServiceCoverageFix
             try { TrackGameLoads(Game.SceneFlow.GameManager.instance); }
             catch (Exception error) { try { Log.Info($"Workload history follows mod lifetime: {error.Message}"); } catch { } }
 
+            RegisterDiagnosticsPanel();
+
+            try
+            {
+                System.Version? version = Assembly.GetExecutingAssembly().GetName().Version;
+                Log.Info($"Installed ServiceCoverageFix {version}. Coverage contract and bridge preflight passed.");
+            }
+            catch { /* Logging cannot change an installed patch. */ }
+        }
+
+        private void RegisterDiagnosticsPanel()
+        {
             try
             {
                 _settings = new DiagnosticSettings(this);
@@ -74,19 +102,15 @@ namespace ServiceCoverageFix
             {
                 try { Log.Info($"Diagnostics panel unavailable: {uiError.Message}"); } catch { }
             }
-
-            try
-            {
-                System.Version? version = Assembly.GetExecutingAssembly().GetName().Version;
-                Log.Info($"Installed ServiceCoverageFix {version}. Coverage contract and bridge preflight passed.");
-            }
-            catch { /* Logging cannot change an installed patch. */ }
         }
 
         internal void TrackGameLoads(Game.SceneFlow.GameManager source)
         {
-            _loadEvents = source;
+            // Keep the optional event API out of the unload method. A JIT can
+            // resolve a missing accessor before reaching a null guard.
+            Action unsubscribe = () => source.onGameLoadingComplete -= OnGameLoadingComplete;
             source.onGameLoadingComplete += OnGameLoadingComplete;
+            _stopTrackingGameLoads = unsubscribe;
         }
 
         private void OnGameLoadingComplete(Colossal.Serialization.Entities.Purpose purpose, GameMode mode) =>
@@ -118,10 +142,7 @@ namespace ServiceCoverageFix
             catch (Exception cleanup) { try { Log.Error(cleanup); } catch { } }
             try
             {
-                if (exception is CoverageContractMismatch)
-                    Log.Info($"ServiceCoverageFix inactive. {exception.Message}");
-                else
-                    Log.Error($"ServiceCoverageFix could not initialize. {exception}");
+                Log.Error($"ServiceCoverageFix could not initialize. {exception}");
             }
             catch { /* Reporting cannot interrupt cleanup. */ }
         }
@@ -132,8 +153,8 @@ namespace ServiceCoverageFix
             List<Exception>? failures = null;
             AttemptCleanup(() =>
             {
-                if (_loadEvents != null) _loadEvents.onGameLoadingComplete -= OnGameLoadingComplete;
-                _loadEvents = null;
+                _stopTrackingGameLoads?.Invoke();
+                _stopTrackingGameLoads = null;
             }, ref failures);
             AttemptCleanup(() =>
             {
@@ -201,7 +222,7 @@ namespace ServiceCoverageFix
 
         internal static void Validate()
         {
-            Type? systemType = AccessTools.TypeByName(ServiceCoverageSystemName);
+            Type? systemType = typeof(UpdateSystem).Assembly.GetType(ServiceCoverageSystemName);
             if (systemType == null)
             {
                 throw new CoverageContractMismatch(ServiceCoverageSystemName + " is missing.");
@@ -238,7 +259,7 @@ namespace ServiceCoverageFix
                 throw new CoverageContractMismatch("Unexpected fields in the game's ApplyCoverageJob.");
             if (!typeof(Unity.Jobs.IJob).IsAssignableFrom(jobType) || !jobType.IsValueType)
                 throw new CoverageContractMismatch("ApplyCoverageJob must remain an IJob value type.");
-            Type coverageType = AccessTools.TypeByName("Game.Net.ServiceCoverage")
+            Type coverageType = systemType.Assembly.GetType("Game.Net.ServiceCoverage")
                 ?? throw new CoverageContractMismatch("Game.Net.ServiceCoverage");
             ValidateLayout(coverageType, new[] { "m_Coverage" },
                 new[] { "Unity.Mathematics.float2" }, new[] { 0 });
@@ -256,7 +277,7 @@ namespace ServiceCoverageFix
         {
             FieldInfo? field = jobType.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             if (field == null || !field.FieldType.IsGenericType ||
-                field.FieldType.GetGenericTypeDefinition().FullName != "Unity.Collections.NativeList`1")
+                field.FieldType.GetGenericTypeDefinition() != typeof(Unity.Collections.NativeList<>))
             {
                 throw new CoverageContractMismatch("Unexpected field " + jobType.FullName + "." + fieldName);
             }

@@ -1,0 +1,9 @@
+capture,min_blocked_ms,matched_blocked_waits,blocked_seconds,ready_to_switchin_seconds,worker_context_ready,worker_contexts_in_capture,waits_with_reason37,one_ms_readier_samples,selected_named_activity,unmatched_waiting_intervals_offcpu_at_least_threshold,exact_game_source_ready_stacks_in_capture
+C08,1,5057,29.0422,0.13066,4861,31,4946,2416,1506,0,0
+C08,5,2178,21.73372,0.05552,2126,31,2147,821,626,0,0
+C08,16.7,167,4.05521,0.0011,165,31,167,47,29,0,0
+C08,33.3,11,0.80975,3e-05,11,31,11,2,2,0,0
+C09,1,17772,121.35989,0.75201,17026,31,17288,7944,4559,0,0
+C09,5,9113,99.29183,0.29399,8899,31,8987,3421,2516,0,0
+C09,16.7,1153,27.45022,0.03012,1145,31,1153,267,166,0,0
+C09,33.3,80,4.08155,0.00191,79,31,80,21,10,0,0

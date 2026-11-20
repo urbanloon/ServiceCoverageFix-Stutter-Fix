@@ -5,14 +5,24 @@ internal static class ShapeTimings
     internal static void Run(Jobs jobs)
     {
         var oracle = jobs.Vanilla;
-        var implementations = new[] { jobs.Baseline ?? throw new ArgumentException("--shapes requires the previous mod."), jobs.Candidate };
+        var previous = jobs.Baseline ?? throw new ArgumentException("--shapes requires the previous mod.");
+        bool small = Environment.GetCommandLineArgs().Contains("--small-shapes");
+        var implementations = small
+            ? new[] { previous, jobs.Candidate, jobs.Vanilla }
+            : new[] { previous, jobs.Candidate };
         int seed = int.Parse(Environment.GetEnvironmentVariable("CS2_SHAPE_SEED") ?? "371");
         int rounds = int.Parse(Environment.GetEnvironmentVariable("CS2_SHAPE_ROUNDS") ?? "23");
         var order = Enumerable.Range(0, implementations.Length).ToArray();
         var random = new Random(seed);
         Console.WriteLine("SHAPE,seed,providers,elements,shape,round,candidate,ns");
-        foreach (var (p, n) in new[] { (2, 8), (2, 128), (4, 32), (8, 256), (8, 8192), (16, 1024),
-                                       (64, 32000), (421, 427319), (526, 510220) })
+        var sizes = small
+            ? new[] { (1, 32), (2, 8), (2, 128), (4, 32), (4, 1024), (5, 80), (8, 256),
+                      (8, 8192), (12, 768), (16, 1024), (16, 8192) }
+            : new[] { (2, 8), (2, 128), (4, 32), (8, 256), (8, 8192), (16, 1024),
+                      (64, 32000), (421, 427319), (526, 510220) };
+        if (Environment.GetEnvironmentVariable("CS2_SHAPE_SAVE_SCALE") == "1")
+            sizes = new[] { (49, 49 * 970), (524, 524 * 970), (533, 533 * 970), (1154, 1154 * 970) };
+        foreach (var (p, n) in sizes)
         {
             foreach (string shape in new[] { "interleaved", "ties", "mixed", "runs" })
             {

@@ -1,5 +1,8 @@
 using System;
 using System.Linq;
+using System.Globalization;
+using System.Threading;
+using System.Threading.Tasks;
 using Game.Net;
 using HarmonyLib;
 using System.Reflection;
@@ -28,7 +31,7 @@ internal static unsafe class WorkloadTests
         using var emptyElements = new NativeList<RawCoverageElement>(1, Allocator.TempJob);
         try
         {
-            if (RuntimeDiagnostics.FormatWorkloads().Split('\n').Length != 1 + (int)CoverageService.Count)
+            if (RuntimeDiagnostics.FormatWorkloads().Split('\n').Length != 2 + (int)CoverageService.Count)
                 throw new Exception("Unexpected number of coverage service rows.");
             var target = (float2*)targets.Ptr;
             for (int i = 0; i < 10; i++)
@@ -72,6 +75,8 @@ internal static unsafe class WorkloadTests
         }
         TestPreviewCaller();
         TestLoadBoundary();
+        TestConcurrentFormatting();
+        TestRetiredCounts();
         RuntimeDiagnostics.Initialize();
         try { RequireRow("Fire and rescue — Awaiting a completed pass"); }
         finally { RuntimeDiagnostics.Dispose(); }
@@ -106,6 +111,96 @@ internal static unsafe class WorkloadTests
         if (counts.Processed != expectedProcessed || counts.Available != providers * length ||
             counts.Providers != providers || counts.Reserved != elements.Length)
             throw new Exception("Incorrect workload totals for unordered heads and early provider retirement");
+    }
+
+    // Pause number formatting itself after it has captured a completed sample.
+    // A schedule and completed load must proceed while that UI read is paused.
+    private sealed class PausedCulture : CultureInfo
+    {
+        internal readonly ManualResetEventSlim Entered = new(false);
+        internal readonly ManualResetEventSlim Resume = new(false);
+        internal PausedCulture() : base("en-US") { }
+        public override object? GetFormat(Type? formatType)
+        {
+            Entered.Set();
+            if (!Resume.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Formatting was not released.");
+            return base.GetFormat(formatType);
+        }
+    }
+
+    private static void TestRetiredCounts()
+    {
+        RuntimeDiagnostics.Initialize();
+        RuntimeDiagnostics.MarkInstalled();
+        RuntimeDiagnostics.MarkPreviewInstalled();
+        using var buildings = new NativeList<RawBuildingData>(1, Allocator.TempJob);
+        using var elements = new NativeList<RawCoverageElement>(1, Allocator.TempJob);
+        var empty = new OptimizedApplyCoverageJob { BuildingData = buildings, Elements = elements };
+        RuntimeDiagnostics.Schedule(empty, default, 0);
+        RuntimeDiagnostics.Schedule(empty, default, 0, true);
+        NativeArray<ExecutionCounters>.DisposalsBeforeFailure = 1;
+        try
+        {
+            try { RuntimeDiagnostics.Dispose(); throw new Exception("Expected partial disposal."); }
+            catch (InvalidOperationException e) when (e.Message == "Injected disposal failure") { }
+            if (RuntimeDiagnostics.Snapshot().Completed != 2 || RuntimeDiagnostics.SnapshotCaller(true).Completed != 1)
+                throw new Exception("Partial disposal lost completed counters.");
+        }
+        finally { NativeArray<ExecutionCounters>.DisposalsBeforeFailure = -1; RuntimeDiagnostics.Dispose(); }
+        var after = RuntimeDiagnostics.Snapshot();
+        if (after.Installed || after.Completed != 2 || after.Started != 2 || after.ManagedExecutions != 2 ||
+            RuntimeDiagnostics.SnapshotCaller(false).Completed != 1 || RuntimeDiagnostics.SnapshotCaller(true).Completed != 1)
+            throw new Exception("Disposal retry lost or duplicated execution counters.");
+    }
+
+    private static void TestConcurrentFormatting()
+    {
+        RuntimeDiagnostics.Initialize();
+        RuntimeDiagnostics.MarkInstalled();
+        var owner = new Mod();
+        typeof(Mod).GetField("_owner", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, owner);
+        using var buildings = new NativeList<RawBuildingData>(1, Allocator.TempJob);
+        using var elements = new NativeList<RawCoverageElement>(1, Allocator.TempJob);
+        var empty = new OptimizedApplyCoverageJob { BuildingData = buildings, Elements = elements };
+        var culture = new PausedCulture();
+        try
+        {
+            RuntimeDiagnostics.Schedule(empty, default, (int)CoverageService.Park).Complete();
+            CoverageRuntimeStatus first = RuntimeDiagnostics.SnapshotCaller(false);
+            string counts = first.ToString();
+            var panelRead = Task.Run(() =>
+            {
+                CultureInfo.CurrentCulture = culture;
+                return RuntimeDiagnostics.FormatWorkloads();
+            });
+            try
+            {
+                if (!culture.Entered.Wait(TimeSpan.FromSeconds(5)))
+                    throw new Exception("The formatting test did not capture a workload.");
+                var change = Task.Run(() =>
+                {
+                    RuntimeDiagnostics.Schedule(empty, default, (int)CoverageService.Police).Complete();
+                    RuntimeDiagnostics.StartLoadedSession(owner);
+                });
+                if (!change.Wait(TimeSpan.FromSeconds(3)))
+                    throw new Exception("A UI formatter held the scheduling lock.");
+            }
+            finally { culture.Resume.Set(); }
+            if (!panelRead.GetAwaiter().GetResult().Contains("Park — pass 1"))
+                throw new Exception("UI did not render its captured sample.");
+            RequireRow("Since the last completed game load");
+            RequireRow("Park — Awaiting a completed pass");
+            RequireRow("Police — Awaiting a completed pass");
+            if (first.Scheduled != 1 || !ReferenceEquals(counts, first.ToString()) ||
+                RuntimeDiagnostics.SnapshotCaller(false).Completed != 2)
+                throw new Exception("An already-returned execution snapshot was mutated or stale.");
+        }
+        finally
+        {
+            culture.Resume.Set();
+            owner.OnDispose();
+        }
+        Console.WriteLine("PASS: paused UI formatting allows new schedules and load reset, preserves immutable counters and cannot recache pre-load rows.");
     }
 
     private static void TestLoadBoundary()

@@ -1,0 +1,11 @@
+# Small Apply worker measurements
+
+This experiment compared stock Apply, 0.3.5 at 0920e76 and the isolated small-queue candidate at a51c351. The latter uses a local cursor for a single stream and keeps up to 15 waiting provider indices and cached priorities in a 16-entry stack array. Queues above 16 use the existing selector. These measurements precede integration with other changes.
+
+Follow the build steps in [the native runner instructions](../../tests/burst_compare/README.md) with the current Game.dll (SHA-256 f076df4b70aa0f21a80345e03a052ca2273bc6754f41dab7e63d837837a43745). Compile all three workers for each target. Run the native runner with the candidate and 0.3.5 directories in that order, set CS2_BURST_VANILLA to the matching stock directory, and pass `--shapes --small-shapes --require-nan`. Use CS2_SHAPE_SEED=371 and 1601 with 23 rounds each. Every round shuffles the three workers, and each corpus compares destination bytes, input elements and allocation guards to stock before timing. The four shapes vary stream overlap and tie density, and use shared targets. Preallocated input resets are outside each measured interval.
+
+[samples.csv.gz](samples.csv.gz) records elapsed nanoseconds by target, seed, workload, round and worker. Worker 0 is 0.3.5, worker 1 is the small-queue candidate, and worker 2 is stock Apply. [summary.csv](summary.csv) gives median worker times and the median of paired ratios for each workload and target. Run `python3 summarize.py` to regenerate it.
+
+On the eight-provider 256-element tie fixture the paired speedup over 0.3.5 was 1.38× on SSE4 and 1.77× on AVX2. At 16 providers and 1,024 tied elements it was 1.12× and 1.26×. Longer streams showed mixed results. At 16 providers and 8,192 fully interleaved elements the ratios were 0.88× and 1.10×. These are isolated worker timings on generated inputs.
+
+A threshold-only trial routing 5–16 providers to the existing linked selector lost about 20% on a 16-provider tie fixture. A separate historical SSE4 threshold sweep routed up to 48 providers through the contiguous queue. It fell to 0.80× for 24 providers and 12,288 interleaved elements, and 0.70× for 32 providers and 16,384 elements. This supports bounding the array at 16.

@@ -122,7 +122,18 @@ namespace Colossal.Serialization.Entities {public enum Purpose {LoadGame}}
 namespace Game {public enum GameMode {Game} public sealed class UpdateSystem{}}
 namespace Game.Net {public enum CoverageService:byte {Healthcare,FireRescue,Police,Park,PostService,Education,EmergencyShelter,Welfare,Count}}
 namespace Game.Modding {public interface IMod {void OnLoad(Game.UpdateSystem system);void OnDispose();}}
+namespace Game.UI.Localization {
+ public readonly struct LocalizedString {
+  internal readonly string Text;
+  private LocalizedString(string text) {Text=text;}
+  public static LocalizedString Value(string text)=>new(text);
+ }
+}
 namespace Game.Settings {
+ [AttributeUsage(AttributeTargets.Property)] public sealed class SettingsUIDisplayNameAttribute:Attribute {
+  public readonly Type GetterType;public readonly string GetterMethod;
+  public SettingsUIDisplayNameAttribute(Type type,string method){GetterType=type;GetterMethod=method;}
+ }
  [AttributeUsage(AttributeTargets.Property)] public sealed class SettingsUISectionAttribute:Attribute {public SettingsUISectionAttribute(string section){}}
  [AttributeUsage(AttributeTargets.Property)] public sealed class SettingsUIMultilineTextAttribute:Attribute{}
  public abstract class ModSetting {
@@ -141,9 +152,15 @@ namespace Game.SceneFlow {
  public sealed class GameManager {
   public static readonly GameManager instance=new();
   public delegate void EventGamePreload(Colossal.Serialization.Entities.Purpose purpose, Game.GameMode mode);
-  public event EventGamePreload? onGameLoadingComplete;
-  public void CompleteLoad()=>onGameLoadingComplete?.Invoke(default,Game.GameMode.Game);
-  public int LoadSubscribers=>onGameLoadingComplete?.GetInvocationList().Length??0;
+  private EventGamePreload? _loadCompleted;
+  public bool LoadEventUnavailable;
+  public int LoadRemoveCalls;
+  public event EventGamePreload onGameLoadingComplete {
+   add { if (LoadEventUnavailable) throw new MissingMethodException(); _loadCompleted += value; }
+   remove { LoadRemoveCalls++; if (LoadEventUnavailable) throw new MissingMethodException(); _loadCompleted -= value; }
+  }
+  public void CompleteLoad()=>_loadCompleted?.Invoke(default,Game.GameMode.Game);
+  public int LoadSubscribers=>_loadCompleted?.GetInvocationList().Length??0;
   public readonly TestLocalizationManager localizationManager=new();
  }
  public sealed class TestLocalizationManager {

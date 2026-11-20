@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Unity.Burst.Cecil">
+      <HintPath>$(BurstRuntime)/Unity.Burst.Cecil.dll</HintPath>
+    </Reference>
+    <Reference Include="Burst.Compiler.IL">
+      <HintPath>$(BurstRuntime)/Burst.Compiler.IL.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

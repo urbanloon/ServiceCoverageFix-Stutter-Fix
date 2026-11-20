@@ -4,10 +4,11 @@
     <Configurations>Debug;Release</Configurations>
     <AssemblyName>ServiceCoverageFix</AssemblyName>
     <RootNamespace>ServiceCoverageFix</RootNamespace>
-    <Version>0.3.5</Version>
+    <Version>0.3.6</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <!-- Ensure third-party runtime assemblies are placed beside the mod DLL. -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
@@ -16,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="tests/**/*.cs" />
+    <Compile Include="src/**/*.cs" />
   </ItemGroup>
 
   <!-- Imports must remain after the first PropertyGroup. -->

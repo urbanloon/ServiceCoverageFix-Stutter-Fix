@@ -32,24 +32,6 @@ public static class Probe
 
 unsafe class Program
 {
-    static IEnumerable<(string Name, Inputs Input)> Cases()
-    {
-        int[] sizes = {0,1,2,3,4,8,16,17,20,49,76,127};
-        for (int mode=0; mode<8; mode++)
-            for (int seed=0; seed<192; seed++)
-                yield return ("mode-"+mode,Inputs.Make(seed,sizes[seed % sizes.Length],31,mode));
-        foreach(int providers in new[]{1,2,3,4,17,128})
-        {
-            var occluded=Inputs.Make(991,providers,49,1,true);
-            Array.Fill(occluded.InitialTargets,2f);
-            yield return ("fully-occluded",occluded);
-            var overlapping=Inputs.Make(117,providers,49,1,true);
-            for(int i=0; i<overlapping.Providers.Length; i++) overlapping.Providers[i].Start=0;
-            yield return ("overlapping-slices",overlapping);
-        }
-        foreach (var pair in new[]{("heavy-distinct",0),("heavy-ties",1),("heavy-shared-target",2)})
-            yield return (pair.Item1,Inputs.Make(351,526,970,pair.Item2,true));
-    }
     static List<Probe.Entry> Observe(Pass pass, Inputs input, Action<nint,nint> job)
     {
         pass.Execute((providers,list)=>{
@@ -77,7 +59,8 @@ unsafe class Program
             Instrument.Copy(candidate,modified,false,managed);
             var jobs=new Jobs(temp,modified,null);
             var totals=new Dictionary<string,(int Cases,long Visits,long Writes)>();
-            foreach(var (label,input) in Cases())
+            using var oracle = args.Length > 2 ? new StreamWriter(args[2]) : null;
+            foreach(var (label,input) in AllCases.Create())
             {
                 using var pass=new Pass(input);
                 var baseline=Observe(pass,input,jobs.Vanilla);
@@ -90,6 +73,7 @@ unsafe class Program
                     throw new Exception($"{label} mismatch at event {equal}: vanilla {baseline.ElementAtOrDefault(equal)} vs candidate {result.ElementAtOrDefault(equal)}");
                 if(!pass.Outputs().AsSpan().SequenceEqual(output)) throw new Exception("Final output mismatch");
                 int writes=baseline.Count(e=>e.Store);
+                oracle?.WriteLine($"{label},{baseline.Count-writes}");
                 var t=totals.GetValueOrDefault(label);
                 totals[label]=(t.Cases+1,t.Visits+baseline.Count-writes,t.Writes+writes);
             }

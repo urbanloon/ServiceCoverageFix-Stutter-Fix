@@ -14,12 +14,49 @@ var mod = Assembly.LoadFrom(Path.GetFullPath(args[1]));
 var gate = mod.GetType("ServiceCoverageFix.CompatibilityGate",true)!;
 const BindingFlags methods = BindingFlags.Static|BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic;
 gate.GetMethod("Validate",methods)!.Invoke(null,null);
+// A CLR type with the same full name in a second assembly is a different job.
+// Another transpiler can remove the original site or add a foreign Schedule call.
+var shadowModule = AssemblyBuilder.DefineDynamicAssembly(
+    new AssemblyName("ForeignCoverageJobs"), AssemblyBuilderAccess.Run).DefineDynamicModule("ForeignCoverageJobs");
+var shadowList = shadowModule.DefineType("Unity.Collections.NativeList`1", TypeAttributes.Public |
+    TypeAttributes.Sealed | TypeAttributes.SequentialLayout, typeof(ValueType));
+shadowList.DefineGenericParameters("T");
+var wrongList = shadowList.CreateType()!;
+var wrongLayout = shadowModule.DefineType("ForeignListHolder", TypeAttributes.Public);
+var building = game.GetType("Game.Simulation.ServiceCoverageSystem+BuildingData", true)!;
+wrongLayout.DefineField("m_BuildingData", wrongList.MakeGenericType(building), FieldAttributes.Public);
+bool rejectedHeader = false;
+try { gate.GetMethod("ValidateNativeListField", methods)!.Invoke(null,
+    new object[]{ wrongLayout.CreateType()!, "m_BuildingData", "BuildingData", 24 }); }
+catch (TargetInvocationException e) when (e.InnerException?.GetType().Name == "CoverageContractMismatch")
+{ rejectedHeader = true; }
+if (!rejectedHeader) throw new InvalidDataException("An unrelated native container header passed the layout gate.");
+var shadowSystem = shadowModule.DefineType("Game.Simulation.ServiceCoverageSystem", TypeAttributes.Public);
+Type CloneJob(string name)
+{
+    var gameJob = game.GetType("Game.Simulation.ServiceCoverageSystem+" + name, true)!;
+    var job = shadowSystem.DefineNestedType(name, TypeAttributes.NestedPublic | TypeAttributes.Sealed |
+        TypeAttributes.SequentialLayout, typeof(ValueType));
+    var contract = gameJob.GetInterfaces().Single(t => t.FullName == "Unity.Jobs.IJob");
+    job.AddInterfaceImplementation(contract);
+    var execute = job.DefineMethod("Execute", MethodAttributes.Public | MethodAttributes.Virtual,
+        typeof(void), Type.EmptyTypes);
+    execute.GetILGenerator().Emit(OpCodes.Ret);
+    if (name == "PrepareCoverageJob")
+        job.DefineField("m_Service", game.GetType("Game.Net.CoverageService", true)!, FieldAttributes.Public);
+    return job.CreateType()!;
+}
+var foreignPrepare = CloneJob("PrepareCoverageJob");
+var foreignApply = CloneJob("ApplyCoverageJob");
+shadowSystem.CreateType();
+
 foreach (bool preview in new[] { false, true })
 {
 var system = preview ? "Game.Tools.CoveragePreviewSystem" : "Game.Simulation.ServiceCoverageSystem";
 var entry = preview ? "SchedulePreview" : "ScheduleOptimized";
 var update = game.GetType(system,true)!.GetMethod("OnUpdate",methods)!;
 var patch = mod.GetType(preview ? "ServiceCoverageFix.ServiceCoveragePreviewPatch" : "ServiceCoverageFix.ServiceCoverageSystemPatch",true)!.GetMethod("Transpiler",methods)!;
+HarmonyEmission.Check(update, patch, entry);
 var emit = new DynamicMethod("SimulatePatch",typeof(void),Type.EmptyTypes).GetILGenerator();
 foreach(var local in update.GetMethodBody()!.LocalVariables) emit.DeclareLocal(local.LocalType,local.IsPinned);
 var source = Reader.Read(update,emit);
@@ -65,6 +102,32 @@ foreach(var count in new[]{0,2})
     try { Transform(test); }catch(InvalidOperationException){rejected=true;}
     Require(rejected,"Ambiguous Apply site accepted.");
 }
+var foreignCall = new CodeInstruction(OpCodes.Call, original.GetGenericMethodDefinition().MakeGenericMethod(foreignApply));
+var foreignOnly = Fresh();
+foreignOnly[apply] = foreignCall;
+bool foreignRejected = false;
+try { Transform(foreignOnly); } catch (InvalidOperationException) { foreignRejected = true; }
+Require(foreignRejected, "A same-named Apply job from a different assembly bypassed preflight.");
+var additionalCall = Fresh();
+additionalCall.Insert(apply + 1, foreignCall);
+Require(Transform(additionalCall).Contains(foreignCall), "An unrelated schedule site was replaced.");
+var foreignCategory = Fresh();
+var prepareSchedule = (MethodInfo)foreignCategory[prepare].operand;
+foreignCategory[prepare].operand = prepareSchedule.GetGenericMethodDefinition().MakeGenericMethod(foreignPrepare);
+if (preview)
+{
+    bool rejected = false;
+    try { Transform(foreignCategory); } catch (InvalidOperationException) { rejected = true; }
+    Require(rejected, "Preview accepted attribution from a foreign Prepare job.");
+}
+else
+{
+    var transformed = Transform(foreignCategory);
+    int call = transformed.FindIndex(i => i.operand is MethodInfo m && m.Name == entry);
+    Require(call > 0 && transformed[call - 1].opcode == OpCodes.Ldc_I4_M1,
+        "Simulation attributed a foreign Prepare job's category.");
+}
+
 foreach(bool alternateEntry in new[]{false,true})
 {
     var test=Fresh();
@@ -80,5 +143,5 @@ foreach(bool alternateEntry in new[]{false,true})
     int call=result.FindIndex(i=>i.operand is MethodInfo m&&m.Name=="ScheduleOptimized");
     Require(call>0&&result[call-1].opcode==OpCodes.Ldc_I4_M1,"Uncertain category was attributed.");
 }
-Console.WriteLine($"PASS real {system}.OnUpdate, Prepare service field, unchanged intervening calls and dependencies, bridge signature, zero/duplicate Apply rejection, uncertain attribution fallback.");
+Console.WriteLine($"PASS real {system}.OnUpdate, Prepare service field, unchanged intervening calls and dependencies, emitted Harmony bridge token, zero/duplicate and foreign job rejection, uncertain attribution fallback.");
 }

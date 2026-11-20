@@ -1,0 +1,13 @@
+capture,activity,wait_start_seconds,blocked_ms,readier_consecutive_samples,first_to_last_sample_ms,last_sample_to_ready_ms,ready_to_switchin_ms,old_wait_reason
+C08,Ordinary route,9.30758,8.9003,9,8.0246,0.7333,0.0025,37
+C08,Citizen happiness,35.4858,11.5288,12,11.0,0.2413,0.0047,37
+C08,Company data count,25.64712,50.7763,3,1.9952,0.1136,0.0024,37
+C08,Household citizen count,60.31573,12.3058,3,1.9996,0.0806,0.0019,37
+C08,Resource seller setup,35.65501,17.7953,18,17.022,0.3967,0.0027,37
+C09,Coverage graph,99.36119,13.9097,13,11.9848,0.8733,0.0016,37
+C09,Ordinary route,105.4722,15.499,15,14.0115,0.4977,0.0019,37
+C09,Coverage result conversion,46.3917,13.388,6,5.0,0.1058,0.0087,37
+C09,Citizen happiness,59.32287,11.919,12,11.0236,0.4155,0.0056,37
+C09,Company data count,148.48399,5.1348,3,1.9808,0.4203,0.0074,37
+C09,Household citizen count,209.86947,5.5543,3,2.0018,0.0989,0.0024,37
+C09,Resource seller setup,132.14077,22.8021,23,22.0462,0.5444,0.0025,37

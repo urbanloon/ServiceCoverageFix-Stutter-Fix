@@ -1,0 +1,14 @@
+PASS 2750 native workloads. All four counters matched input metadata and 2669403 independently instrumented stock visits. Native target bytes, input elements and guards matched.
+Game SHA256 AAEE15C4FA41C130ABAA1183840667E4FAAE531D67E8A9FA7536618EFFA2F86A
+Mode 0: 192/192 bitwise matches.
+Mode 1: 192/192 bitwise matches.
+Mode 2: 192/192 bitwise matches.
+Mode 3: 192/192 bitwise matches.
+Mode 4: 192/192 bitwise matches.
+Mode 5: 192/192 bitwise matches.
+Mode 6: 192/192 bitwise matches.
+Mode 7: 192/192 bitwise matches.
+Bitwise matches=1536, elements=636499, NaN-probe differences=0
+PASS: 1536 unordered-priority workloads, 634792 elements, all target bits matched.
+PASS: 8193 active providers, one tied-priority element each.
+PASS: 65537 active providers, one tied-priority element each.

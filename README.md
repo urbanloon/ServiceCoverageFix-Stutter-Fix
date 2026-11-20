@@ -34,7 +34,20 @@ Colossal Order's `Game.dll`, the game's generated Burst binary, the original ETL
 captures or raw frame-time recordings. The 0.3.5 worker harness, per-trial
 timings and anonymized trace summaries are included with this candidate.
 
-## Candidate 0.3.5
+## Candidate 0.3.6
+
+Version 0.3.6 improves both the small-provider merge and the large park merge.
+It also fixes the Options binding that caused 0.3.5 to emit widget labels
+without the diagnostic values. The corrected controls display live execution
+status and each service’s most recent completed workload for both simulation
+and preview. A compatibility rejection leaves its reason available in Options.
+
+See [0.3.6 performance and verification](PERFORMANCE-0.3.6.md) for comparisons
+against 0.3.5 and vanilla, real game Options writer checks and the additional
+trace findings. Open `ServiceCoverageFix.sln` and rebuild **Release** with the
+official Cities: Skylines II mod toolchain.
+
+## Previous candidate 0.3.5
 
 Both the normal service rotation and the tool/infoview preview schedule the game's
 `ApplyCoverageJob`. Version 0.3.4 intercepted only the simulation call. The
@@ -42,8 +55,8 @@ candidate checks each scheduling site separately, captures the service from the
 actual Prepare job, and runs the replacement with the original Apply dependency.
 The game retains ownership of its buffers and decides when each service updates.
 
-**Options → Service Coverage Stutter Fix → Diagnostics** shows separate simulation
-and preview counters. For each service, **providers** counts eligible providers
+0.3.5 collected separate simulation and preview counters. Its Options display
+was corrected in 0.3.6. For each service, **providers** counts eligible providers
 with work and a live budget. **Available** sums their usable element ranges,
 **processed** counts visits including already-covered targets, and **reserved**
 is the total prepared input list length before filtering. Workload rows reset on
@@ -635,7 +648,7 @@ and **Build → Rebuild Solution**. The project resolves game references through
 official template and restores its private Harmony 2.2.2 dependency via NuGet.
 
 Offline validation instructions, target game builds and results are in
-[PERFORMANCE.md](PERFORMANCE.md). The native verifier uses the supplied Unity
+[PERFORMANCE-0.3.6.md](PERFORMANCE-0.3.6.md). The native verifier uses the supplied Unity
 Burst compiler to build an isolated worker. The Visual Studio project uses the
 official mod build and publish profiles.
 

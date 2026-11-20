@@ -40,16 +40,18 @@ namespace ServiceCoverageFix
             IEnumerable<CodeInstruction> instructions, ILGenerator generator, bool preview, out bool bound)
         {
             var code = new List<CodeInstruction>(instructions);
-            var applySites = code.FindAll(i => IsSchedule(i, CompatibilityGate.ApplyCoverageJobName));
+            Type applyJobType = CompatibilityGate.ApplyCoverageJobType;
+            var applySites = code.FindAll(i => IsSchedule(i, applyJobType));
             if (applySites.Count != 1)
                 throw new InvalidOperationException($"Expected exactly one ApplyCoverageJob Schedule call, found {applySites.Count}.");
             var apply = applySites[0];
-            var applyJobType = ((MethodInfo)apply.operand!).GetGenericArguments()[0];
             string entry = preview ? nameof(ApplyCoverageScheduleBridge.SchedulePreview) : nameof(ApplyCoverageScheduleBridge.ScheduleOptimized);
             var bridge = AccessTools.Method(typeof(ApplyCoverageScheduleBridge), entry)!
                 .MakeGenericMethod(applyJobType);
 
-            var prepareSites = code.FindAll(i => IsSchedule(i, CompatibilityGate.ServiceCoverageSystemName + "+PrepareCoverageJob"));
+            var prepareJobType = CompatibilityGate.ServiceCoverageSystemType.GetNestedType(
+                "PrepareCoverageJob", BindingFlags.Public | BindingFlags.NonPublic);
+            var prepareSites = code.FindAll(i => IsSchedule(i, prepareJobType));
             FieldInfo? serviceField = null;
             if (prepareSites.Count == 1)
             {
@@ -64,8 +66,7 @@ namespace ServiceCoverageFix
                         code[i].opcode.FlowControl != FlowControl.Cond_Branch;
                 if (singlePath)
                 {
-                    Type prepare = ((MethodInfo)prepareSites[0].operand!).GetGenericArguments()[0];
-                    var field = prepare.GetField("m_Service", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    var field = prepareJobType!.GetField("m_Service", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                     if (field?.FieldType == typeof(Game.Net.CoverageService) &&
                         Enum.GetUnderlyingType(field.FieldType) == typeof(byte)) serviceField = field;
                 }
@@ -99,14 +100,14 @@ namespace ServiceCoverageFix
             return code;
         }
 
-        private static bool IsSchedule(CodeInstruction instruction, string jobName)
+        private static bool IsSchedule(CodeInstruction instruction, Type? jobType)
         {
             if (instruction.opcode != OpCodes.Call || !(instruction.operand is MethodInfo method) ||
                 method.Name != nameof(IJobExtensions.Schedule) || method.DeclaringType != typeof(IJobExtensions) ||
                 !method.IsGenericMethod || method.ReturnType != typeof(JobHandle)) return false;
             Type[] arguments = method.GetGenericArguments();
             ParameterInfo[] parameters = method.GetParameters();
-            return arguments.Length == 1 && arguments[0].FullName == jobName &&
+            return arguments.Length == 1 && arguments[0] == jobType &&
                 parameters.Length == 2 && parameters[0].ParameterType == arguments[0] &&
                 parameters[1].ParameterType == typeof(JobHandle);
         }
@@ -273,8 +274,7 @@ namespace ServiceCoverageFix
                     BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
                 if (field == null || !field.FieldType.IsGenericType ||
-                    field.FieldType.GetGenericTypeDefinition().FullName !=
-                        "Unity.Collections.NativeList`1")
+                    field.FieldType.GetGenericTypeDefinition() != typeof(NativeList<>))
                 {
                     throw new MissingFieldException(typeof(TApplyJob).FullName, fieldName);
                 }

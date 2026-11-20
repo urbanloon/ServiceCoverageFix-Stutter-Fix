@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using Game.Net;
 using Unity.Collections;
@@ -36,12 +35,17 @@ namespace ServiceCoverageFix
         public long ManagedExecutions { get; internal set; }
         public long Fallbacks { get; internal set; }
         public string LastFailure { get; internal set; } = string.Empty;
+        internal const string FallbackState = "Fallback observed";
+        internal const string ManagedState = "Managed execution observed";
+        internal const string BurstState = "Burst execution observed";
+
         public string State => !Installed ? "Inactive" :
-            Fallbacks != 0 ? "Fallback observed" :
-            ManagedExecutions != 0 ? "Managed execution observed" :
-            Completed != 0 ? "Burst execution observed" :
+            Fallbacks != 0 ? FallbackState :
+            ManagedExecutions != 0 ? ManagedState :
+            Completed != 0 ? BurstState :
             Scheduled != 0 ? "Awaiting execution" : "Awaiting coverage update";
-        public override string ToString() =>
+        private string? _text;
+        public override string ToString() => _text ??=
             $"{State}; scheduled={Scheduled}, started={Started}, completed={Completed}, " +
             $"managed={ManagedExecutions}, fallbacks={Fallbacks}";
     }
@@ -55,6 +59,7 @@ namespace ServiceCoverageFix
             internal JobHandle Handle;
             internal long Submission;
             internal long ObservedCompletions;
+            internal bool WorkloadObserved;
             internal int Service;
             internal bool Preview;
         }
@@ -63,6 +68,7 @@ namespace ServiceCoverageFix
         {
             internal long Submission;
             internal WorkloadCounts Workload;
+            internal string? Row;
         }
 
         private static readonly List<PassSlot> Slots = new List<PassSlot>();
@@ -72,6 +78,11 @@ namespace ServiceCoverageFix
         {
             internal readonly Sample[] Latest = new Sample[256];
             internal string? Text;
+            internal long TextVersion;
+            internal CoverageRuntimeStatus? Status;
+            internal long ReleasedCompleted;
+            internal long ReleasedManaged;
+            internal long ReleasedStarted;
             internal long Scheduled;
             internal long Fallbacks;
             internal string LastFailure = string.Empty;
@@ -79,6 +90,7 @@ namespace ServiceCoverageFix
 
         private static CallerHistory _simulation = new CallerHistory();
         private static CallerHistory _preview = new CallerHistory();
+        private static CoverageRuntimeStatus? _totalStatus;
         private static bool _previewInstalled;
         private static bool _installed;
         private static long _scheduled;
@@ -88,7 +100,7 @@ namespace ServiceCoverageFix
         private static string _lastFailure = string.Empty;
         private static string _lastReportedState = string.Empty;
 
-        internal static void Initialize()
+        internal static void Initialize(bool allocateWorkerSlot = true)
         {
             lock (Sync)
             {
@@ -96,8 +108,9 @@ namespace ServiceCoverageFix
                     throw new InvalidOperationException("Previous diagnostic jobs have not been disposed.");
                 _simulation = new CallerHistory();
                 _preview = new CallerHistory();
-                AllocateSlot(false);
+                if (allocateWorkerSlot) AllocateSlot(false);
                 _scheduled = _fallbacks = _workloadCutoff = 0;
+                _totalStatus = null;
                 _observedLoad = false;
                 _installed = _previewInstalled = false;
                 _lastFailure = _lastReportedState = string.Empty;
@@ -115,6 +128,8 @@ namespace ServiceCoverageFix
                 _observedLoad = true;
                 Array.Clear(_simulation.Latest, 0, _simulation.Latest.Length);
                 Array.Clear(_preview.Latest, 0, _preview.Latest.Length);
+                _simulation.TextVersion++;
+                _preview.TextVersion++;
                 _simulation.Text = _preview.Text = null;
             }
         }
@@ -143,9 +158,9 @@ namespace ServiceCoverageFix
 
         private static void ObserveWorkload(PassSlot slot)
         {
-            if (slot.Submission == 0) return;
+            if (slot.Submission == 0 || slot.WorkloadObserved) return;
             var counters = (ExecutionCounters*)NativeArrayUnsafeUtility.GetUnsafePtr(slot.Counters);
-            long completed = Interlocked.Read(ref counters->Completed);
+            long completed = Volatile.Read(ref counters->Completed);
             if (completed == slot.ObservedCompletions) return;
             // The acquire read above proves the sole writer has finished its
             // payload. Sync excludes reuse while the UI copies that payload.
@@ -154,9 +169,11 @@ namespace ServiceCoverageFix
                 history.Latest[slot.Service].Submission < slot.Submission)
             {
                 history.Latest[slot.Service] = new Sample { Submission = slot.Submission, Workload = counters->Workload };
+                history.TextVersion++;
                 history.Text = null;
             }
             slot.ObservedCompletions = completed;
+            slot.WorkloadObserved = true;
         }
 
         internal static JobHandle Schedule(OptimizedApplyCoverageJob job, JobHandle dependency, int service = -1, bool preview = false)
@@ -168,6 +185,7 @@ namespace ServiceCoverageFix
                 PassSlot? free = null;
                 foreach (PassSlot slot in Slots)
                 {
+                    if (slot.Preview != preview) continue;
                     if (slot.Submission != 0 && slot.Handle.IsCompleted)
                     {
                         // Reclaim a finished handle only. No active job is forced to run.
@@ -176,13 +194,18 @@ namespace ServiceCoverageFix
                         slot.Submission = 0;
                         slot.Handle = default;
                     }
-                    if (slot.Submission == 0 && slot.Preview == preview && free == null) free = slot;
+                    if (slot.Submission == 0)
+                    {
+                        free = slot;
+                        break;
+                    }
                 }
                 if (free == null) free = AllocateSlot(preview);
                 job.Diagnostics = (ExecutionCounters*)NativeArrayUnsafeUtility.GetUnsafePtr(free.Counters);
                 JobHandle handle = IJobExtensions.Schedule(job, dependency);
                 // No allocating or throwing operations after successful submission.
                 free.Handle = handle;
+                free.WorkloadObserved = false;
                 free.Service = service;
                 free.Submission = ++_scheduled;
                 (preview ? _preview : _simulation).Scheduled++;
@@ -190,40 +213,82 @@ namespace ServiceCoverageFix
             }
         }
 
-        internal static string FormatWorkloads(bool preview = false)
+        private static class ServiceRows
         {
-            lock (Sync)
+            internal static readonly KeyValuePair<byte, string>[] Labels = BuildLabels();
+
+            private static KeyValuePair<byte, string>[] BuildLabels()
             {
-                if (preview && !_previewInstalled) return "Preview replacement inactive";
-                if (!preview && ServiceCoverageSystemPatch.ServiceBindingAvailable == false)
-                    return "Service categories are unavailable for this game or patch layout.";
-                CallerHistory history = preview ? _preview : _simulation;
-                foreach (PassSlot slot in Slots)
-                    if (slot.Preview == preview) ObserveWorkload(slot);
-                if (history.Text != null) return history.Text;
-                var text = new StringBuilder(_observedLoad ? "Since the last completed game load" : "Since mod load");
+                var labels = new List<KeyValuePair<byte, string>>();
                 foreach (CoverageService service in Enum.GetValues(typeof(CoverageService)))
                 {
                     string name = service.ToString();
                     if (name == "Count") continue;
-                    text.AppendLine();
                     if (name == "FireRescue") name = "Fire and rescue";
                     if (name == "PostService") name = "Postal service";
                     if (name == "EmergencyShelter") name = "Emergency shelter";
-                    Sample sample = history.Latest[(byte)service];
-                    text.Append(name).Append(" — ");
-                    if (sample.Submission == 0)
-                    {
-                        text.Append("Awaiting a completed pass");
-                        continue;
-                    }
-                    WorkloadCounts counts = sample.Workload;
-                    text.AppendFormat("pass {0:N0}, {1:N0} {2}, {3:N0} available, {4:N0} processed, {5:N0} reserved",
-                        sample.Submission, counts.Providers, counts.Providers == 1 ? "provider" : "providers",
-                        counts.Available, counts.Processed, counts.Reserved);
+                    labels.Add(new KeyValuePair<byte, string>((byte)service, name));
                 }
-                return history.Text = text.ToString();
+                return labels.ToArray();
             }
+        }
+
+        internal static string FormatWorkloads(bool preview = false)
+        {
+            Sample[] samples;
+            CallerHistory history;
+            long version;
+            bool observedLoad;
+            KeyValuePair<byte, string>[] labels;
+            lock (Sync)
+            {
+                if (preview && !_previewInstalled) return "Preview replacement inactive";
+                if (!preview && ServiceCoverageSystemPatch.ServiceBindingAvailable == false)
+                    return "Simulation service categories are unavailable for this game or patch layout.";
+                history = preview ? _preview : _simulation;
+                foreach (PassSlot slot in Slots)
+                    if (slot.Preview == preview) ObserveWorkload(slot);
+                if (history.Text != null) return history.Text;
+                labels = ServiceRows.Labels;
+                samples = new Sample[labels.Length];
+                for (int i = 0; i < samples.Length; i++) samples[i] = history.Latest[labels[i].Key];
+                version = history.TextVersion;
+                observedLoad = _observedLoad;
+            }
+
+            // Format a managed copy. Rendering a newly completed pass does not
+            // hold the scheduling lock while formatting every service and number.
+            string[] lines = new string[samples.Length + 2];
+            lines[0] = preview ? "Latest tool and infoview preview workloads" : "Latest simulation workloads";
+            lines[1] = observedLoad ? "Since the last completed game load" : "Since mod load";
+            for (int i = 0; i < samples.Length; i++)
+                lines[i + 2] = samples[i].Row ?? FormatRow(labels[i].Value, samples[i]);
+
+            string result = string.Join(Environment.NewLine, lines);
+            lock (Sync)
+            {
+                if (version == history.TextVersion)
+                {
+                    for (int i = 0; i < samples.Length; i++)
+                        history.Latest[labels[i].Key].Row = lines[i + 2];
+                    history.Text = result;
+                }
+            }
+            return result;
+        }
+
+        private static string FormatRow(string name, Sample sample)
+        {
+            if (sample.Submission == 0) return name + " — Awaiting a completed pass";
+            WorkloadCounts c = sample.Workload;
+            return string.Format("{0} — pass {1:N0}, {2:N0} {3}, {4:N0} available, {5:N0} processed, {6:N0} reserved",
+                name, sample.Submission, c.Providers, c.Providers == 1 ? "provider" : "providers",
+                c.Available, c.Processed, c.Reserved);
+        }
+
+        internal static string LastFailure(bool preview)
+        {
+            lock (Sync) return (preview ? _preview : _simulation).LastFailure;
         }
 
         internal static void RecordFallback(Exception error, bool preview = false)
@@ -233,7 +298,10 @@ namespace ServiceCoverageFix
                 CallerHistory history = preview ? _preview : _simulation;
                 _fallbacks++;
                 history.Fallbacks++;
-                history.LastFailure = _lastFailure = error.ToString();
+                string failure;
+                try { failure = error.ToString(); }
+                catch { failure = error.GetType().Name; }
+                history.LastFailure = _lastFailure = failure;
             }
         }
 
@@ -244,22 +312,35 @@ namespace ServiceCoverageFix
             lock (Sync)
             {
                 CallerHistory history = preview == true ? _preview : _simulation;
-                var result = new CoverageRuntimeStatus
-                {
-                    Installed = _installed && (preview != true || _previewInstalled),
-                    Scheduled = preview.HasValue ? history.Scheduled : _scheduled,
-                    Fallbacks = preview.HasValue ? history.Fallbacks : _fallbacks,
-                    LastFailure = preview.HasValue ? history.LastFailure : _lastFailure
-                };
+                bool installed = _installed && (preview != true || _previewInstalled);
+                long scheduled = preview.HasValue ? history.Scheduled : _scheduled;
+                long fallbacks = preview.HasValue ? history.Fallbacks : _fallbacks;
+                string failure = preview.HasValue ? history.LastFailure : _lastFailure;
+                long completed = preview.HasValue ? history.ReleasedCompleted : _simulation.ReleasedCompleted + _preview.ReleasedCompleted;
+                long started = preview.HasValue ? history.ReleasedStarted : _simulation.ReleasedStarted + _preview.ReleasedStarted;
+                long managed = preview.HasValue ? history.ReleasedManaged : _simulation.ReleasedManaged + _preview.ReleasedManaged;
                 foreach (PassSlot slot in Slots)
                 {
                     if (preview.HasValue && slot.Preview != preview.Value) continue;
                     var p = (ExecutionCounters*)NativeArrayUnsafeUtility.GetUnsafePtr(slot.Counters);
-                    // These are live observations, not a synchronized frame snapshot.
-                    result.Completed += Interlocked.Read(ref p->Completed);
-                    result.Started += Interlocked.Read(ref p->Started);
-                    result.ManagedExecutions += Interlocked.Read(ref p->Managed);
+                    // Read publication first and Started last. A just-starting
+                    // worker may become visible during an observation.
+                    completed += Volatile.Read(ref p->Completed);
+                    managed += Volatile.Read(ref p->Managed);
+                    started += Volatile.Read(ref p->Started);
                 }
+                CoverageRuntimeStatus? previous = preview.HasValue ? history.Status : _totalStatus;
+                if (previous != null && previous.Installed == installed && previous.Scheduled == scheduled &&
+                    previous.Started == started && previous.Completed == completed && previous.ManagedExecutions == managed &&
+                    previous.Fallbacks == fallbacks && previous.LastFailure == failure)
+                    return previous;
+                var result = new CoverageRuntimeStatus
+                {
+                    Installed = installed, Scheduled = scheduled, Started = started, Completed = completed,
+                    ManagedExecutions = managed, Fallbacks = fallbacks, LastFailure = failure
+                };
+                if (preview.HasValue) history.Status = result;
+                else _totalStatus = result;
                 return result;
             }
         }
@@ -269,9 +350,30 @@ namespace ServiceCoverageFix
             // Diagnostics must never trigger a gameplay fallback.
             try
             {
-                CoverageRuntimeStatus status = Snapshot();
-                if (status.State == _lastReportedState) return;
-                _lastReportedState = status.State;
+                CoverageRuntimeStatus status;
+                lock (Sync)
+                {
+                    // Once Burst has run, only a managed job or a fallback can
+                    // change the log state. The complete counters stay live in Options.
+                    if (_installed)
+                    {
+                        if (_fallbacks != 0 && _lastReportedState == CoverageRuntimeStatus.FallbackState) return;
+                        if (_fallbacks == 0 && _lastReportedState == CoverageRuntimeStatus.ManagedState) return;
+                        if (_fallbacks == 0 && _lastReportedState == CoverageRuntimeStatus.BurstState)
+                        {
+                            bool managed = false;
+                            foreach (PassSlot slot in Slots)
+                            {
+                                var p = (ExecutionCounters*)NativeArrayUnsafeUtility.GetUnsafePtr(slot.Counters);
+                                if (Volatile.Read(ref p->Managed) != 0) { managed = true; break; }
+                            }
+                            if (!managed) return;
+                        }
+                    }
+                    status = Snapshot();
+                    if (status.State == _lastReportedState) return;
+                    _lastReportedState = status.State;
+                }
                 Mod.Log.Info($"Coverage execution status: {status}");
             }
             catch { /* Status reporting cannot affect simulation scheduling. */ }
@@ -290,11 +392,21 @@ namespace ServiceCoverageFix
                 // later Dispose throws, status readers and retries see only live slots.
                 for (int i = Slots.Count - 1; i >= 0; i--)
                 {
-                    Slots[i].Counters.Dispose();
+                    PassSlot slot = Slots[i];
+                    var counters = slot.Counters[0];
+                    slot.Counters.Dispose();
+                    // Publish the retired totals only after release succeeds.
+                    // A failed partial cleanup can be inspected and retried.
+                    CallerHistory history = slot.Preview ? _preview : _simulation;
+                    history.ReleasedCompleted += counters.Completed;
+                    history.ReleasedStarted += counters.Started;
+                    history.ReleasedManaged += counters.Managed;
                     Slots.RemoveAt(i);
                 }
                 Array.Clear(_simulation.Latest, 0, _simulation.Latest.Length);
                 Array.Clear(_preview.Latest, 0, _preview.Latest.Length);
+                _simulation.TextVersion++;
+                _preview.TextVersion++;
                 _simulation.Text = _preview.Text = null;
             }
         }

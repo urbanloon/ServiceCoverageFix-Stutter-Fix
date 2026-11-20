@@ -1,0 +1,9 @@
+capture,activity,entry_samples,longest_uninterrupted_sample_span_ms,samples_in_that_span
+C08,Ordinary route,0,0,0
+C08,Coverage graph,0,0,0
+C08,Resource seller setup,0,0,0
+C08,Replacement Apply,0,0,0
+C09,Ordinary route,168,60.0014,61
+C09,Coverage graph,11,7.0124,8
+C09,Resource seller setup,127,9.9779,11
+C09,Replacement Apply,0,0,0

@@ -7,6 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../visit_order/AllCases.cs" />
+    <Compile Include="../visit_order/FrontierCases.cs" />
     <Compile Include="../game_compare/Inputs.cs" Link="Inputs.cs" />
     <Compile Include="../game_compare/UnorderedPriorities.cs" Link="UnorderedPriorities.cs" />
     <Compile Include="../game_compare/Program.cs" Link="Program.cs" />

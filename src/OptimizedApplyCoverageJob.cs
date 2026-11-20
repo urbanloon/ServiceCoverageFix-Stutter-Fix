@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using MethodImpl = System.Runtime.CompilerServices.MethodImplAttribute;
+using MethodImplOptions = System.Runtime.CompilerServices.MethodImplOptions;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Unity.Burst;
@@ -75,7 +77,7 @@ namespace ServiceCoverageFix
     {
         private const int ByteRadixBucketCount = 1025;
         private const int OccupancyWordCount = 17;
-        private const int OrderedMergeLimit = 4;
+        private const int SmallMergeLimit = 16;
 
         [NativeDisableContainerSafetyRestriction]
         internal NativeList<RawBuildingData> BuildingData;
@@ -142,9 +144,9 @@ namespace ServiceCoverageFix
             {
                 skipped = ExecuteSingleProvider(&slots[0].State, elements);
             }
-            else if (recordCount <= OrderedMergeLimit)
+            else if (recordCount <= SmallMergeLimit)
             {
-                skipped = ExecuteOrderedMerge(slots, elements, recordCount);
+                skipped = ExecuteSmallMerge(slots, elements, recordCount);
             }
             else
             {
@@ -175,15 +177,17 @@ namespace ServiceCoverageFix
             [NoAlias] ProviderState* state,
             [NoAlias] RawCoverageElement* elements)
         {
-            while (state->NextIndex != state->EndIndex)
+            ProviderState local = *state;
+            int cursor = local.NextIndex;
+            int end = local.EndIndex;
+            while (cursor != end)
             {
-                int elementIndex = state->NextIndex++;
-                if (!ApplyElement(state, elements + elementIndex))
+                if (!ApplyElement(&local, elements + cursor++))
                 {
                     break;
                 }
             }
-            return state->EndIndex - state->NextIndex;
+            return end - cursor;
         }
 
         private static int ExecuteOrderedMerge(
@@ -191,8 +195,8 @@ namespace ServiceCoverageFix
             [NoAlias] RawCoverageElement* elements,
             int recordCount)
         {
-            // Follow the game's adjacent reinsertion comparisons for small
-            // queues and for unordered initial heads. Links preserve the exact
+            // Follow the game's adjacent reinsertion comparisons for
+            // unordered initial heads. Links preserve the exact
             // order of the sorted records even when NaN separates two runs.
             for (int i = 0; i < recordCount - 1; i++)
             {
@@ -241,6 +245,68 @@ namespace ServiceCoverageFix
                     break;
                 }
             }
+        }
+
+        // The highest-priority entry sits at the end. Each losing winner is
+        // reinserted above its ties, following the game's ordered comparisons.
+        private struct QueueEntry
+        {
+            internal int Index;
+            internal float Key;
+        }
+
+        [SkipLocalsInit]
+        private static int ExecuteSmallMerge(
+            [NoAlias] ProviderSlot* slots,
+            [NoAlias] RawCoverageElement* elements, int count)
+        {
+            QueueEntry* queue = stackalloc QueueEntry[SmallMergeLimit];
+            int length = count - 1;
+            for (int i = 0; i < length; i++)
+            {
+                int index = count - i - 1;
+                queue[i] = new QueueEntry { Index = index, Key = elements[slots[index].State.NextIndex].AverageCoverage };
+            }
+            int winner = 0;
+            int skipped = 0;
+            while (length != 0)
+            {
+                QueueEntry runner = queue[--length];
+                ProviderState* state = &slots[winner].State;
+                ProviderState local = *state;
+                int cursor = local.NextIndex;
+                int end = local.EndIndex;
+                while (true)
+                {
+                    int index = cursor++;
+                    bool hasNext = cursor != end;
+                    float next = hasNext ? elements[cursor].AverageCoverage : 0f;
+                    bool live = ApplyElement(&local, elements + index);
+                    if (!live || !hasNext)
+                    {
+                        skipped += end - cursor;
+                        break;
+                    }
+                    if (!(next < runner.Key))
+                    {
+                        continue;
+                    }
+
+                    int position = length;
+                    while (position != 0 && next < queue[position - 1].Key)
+                    {
+                        queue[position] = queue[position - 1];
+                        position--;
+                    }
+                    queue[position] = new QueueEntry { Index = winner, Key = next };
+                    length++;
+                    break;
+                }
+                state->NextIndex = cursor;
+                state->Remaining = local.Remaining;
+                winner = runner.Index;
+            }
+            return skipped + ExecuteSingleProvider(&slots[winner].State, elements);
         }
 
         [SkipLocalsInit]
@@ -333,6 +399,8 @@ namespace ServiceCoverageFix
             return skipped + ExecuteSingleProvider(&slots[winner].State, elements);
         }
 
+        // Burst otherwise emits a call for each change of winning provider.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int ByteTakeWinner(
             ProviderSlot* slots,
             int* heads,

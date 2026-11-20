@@ -1,0 +1,9 @@
+case,slots,baseline_ns,candidate_ns,paired_speedup,baseline_bytes,candidate_bytes
+pass-managed,1,92.00,86.01,1.055,224,152
+menu-unchanged,1,373.46,132.97,2.753,792,0
+pass-and-menu-changed,1,5068.53,1095.03,4.605,6899,2577
+log-Burst-state,1,30.12,13.58,2.174,72,0
+pass-managed,16,223.26,76.64,2.917,224,152
+menu-unchanged,16,788.39,308.91,2.579,792,0
+pass-and-menu-changed,16,5796.10,1272.73,4.524,6899,2577
+log-Burst-state,16,141.08,35.46,3.968,72,0

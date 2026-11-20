@@ -1,5 +1,7 @@
 # Service Coverage Stutter Fix 0.3.5
 
+**Historical 0.3.5 report.** The subsequent pass found that the game’s Options writer omitted the diagnostic values described below. Version 0.3.6 corrects the binding. [Updated verification](PERFORMANCE-0.3.6.md)
+
 The reference build is 0.3.4 at `88ed617d84ccf0eab656292bf0a2b96712a6af67`. That build intercepted Apply in the simulation. A second caller in the tool and infoview preview continued to schedule the game's original Apply worker. Both callers run the replacement in 0.3.5 on the two reviewed game builds. Each retains its original job dependency, service slot, update cadence and disposal chain. The mod adds no save fields or serialized components.
 
 ## What the final worker costs

@@ -1,0 +1,67 @@
+Game.dll original SHA-256 aaee15c4fa41c130abaa1183840667e4faae531d67e8a9fa7536618effa2f86a
+ServiceCoverageFix.dll original SHA-256 b8c8a7d6494839bda0445af05098d94c1d2841c3fa107dd45368993284748a6d
+Game.Simulation.ServiceCoverageSystem/ApplyCoverageJob: consumed index at IL_0096
+Game.Simulation.ServiceCoverageSystem/ApplyCoverageJob: destination pointer and both float bit patterns at IL_0159
+ServiceCoverageFix.OptimizedApplyCoverageJob: ApplyElement entry logs element pointer
+ServiceCoverageFix.OptimizedApplyCoverageJob: destination pointer and both float bit patterns at IL_00ad
+group,cases,selected_elements,target_stores
+mode-0,192,59794,16680
+mode-1,192,59573,17004
+mode-2,192,70922,1135
+mode-3,192,59794,16680
+mode-4,192,69602,14308
+mode-5,192,55326,26339
+mode-6,192,58831,18370
+mode-7,192,60239,22673
+fully-occluded,6,7595,0
+overlapping-slices,6,7595,361
+boundary-1-ties,8,163,56
+boundary-1-subnormal,8,163,56
+boundary-1-initial-nan,8,163,56
+boundary-1-interior-nan,8,163,56
+boundary-1-filter,8,163,49
+boundary-2-ties,8,357,92
+boundary-2-subnormal,8,357,89
+boundary-2-initial-nan,8,396,100
+boundary-2-interior-nan,8,357,92
+boundary-2-filter,8,359,84
+boundary-4-ties,8,723,130
+boundary-4-subnormal,8,717,126
+boundary-4-initial-nan,8,776,130
+boundary-4-interior-nan,8,753,137
+boundary-4-filter,8,722,117
+boundary-5-ties,8,951,128
+boundary-5-subnormal,8,984,119
+boundary-5-initial-nan,8,970,122
+boundary-5-interior-nan,8,951,127
+boundary-5-filter,8,950,131
+boundary-8-ties,8,1624,159
+boundary-8-subnormal,8,1651,161
+boundary-8-initial-nan,8,1490,159
+boundary-8-interior-nan,8,1652,159
+boundary-8-filter,8,1715,156
+boundary-15-ties,8,3453,211
+boundary-15-subnormal,8,3255,188
+boundary-15-initial-nan,8,2707,181
+boundary-15-interior-nan,8,3454,204
+boundary-15-filter,8,3421,218
+boundary-16-ties,8,3703,211
+boundary-16-subnormal,8,3450,190
+boundary-16-initial-nan,8,2867,188
+boundary-16-interior-nan,8,3737,211
+boundary-16-filter,8,3790,206
+boundary-17-ties,8,3921,217
+boundary-17-subnormal,8,3645,202
+boundary-17-initial-nan,8,4117,236
+boundary-17-interior-nan,8,3952,218
+boundary-17-filter,8,4045,209
+all-three-symbol-placements,729,4374,1620
+provider-boundaries-0,30,137351,265
+provider-boundaries-1,30,137351,260
+provider-boundaries-2,30,137351,246
+provider-boundaries-3,30,137351,271
+provider-boundaries-4,30,2907,124
+heavy-distinct,1,510220,57461
+heavy-ties,1,510220,62441
+heavy-shared-target,1,510220,14
+PASS 2750 cases; 2669403 visits; 262133 stores. Interleaved visits, destination IDs, both float bit patterns, final bytes and guards match.

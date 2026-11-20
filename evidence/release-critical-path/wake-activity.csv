@@ -1,0 +1,153 @@
+capture,min_blocked_ms,readier_activity,near_wakes,near_within_half_ms,sustained_wakes,sustained_covering_half_wait,sustained_sampled_span_sum_ms,longest_sustained_sampled_span_ms
+C08,1,Other or unresolved activity,910,534,0,0,0,0
+C08,1,Replacement Apply,0,0,0,0,0,0
+C08,1,Other pathfinding dispatcher work,0,0,0,0,0,0
+C08,1,Coverage graph,0,0,0,0,0,0
+C08,1,Ordinary route,48,24,17,15,59.0744,8.0246
+C08,1,Availability,0,0,0,0,0,0
+C08,1,Coverage result conversion,2,1,0,0,0,0
+C08,1,Procedural rendering preparation,321,321,0,0,0,0
+C08,1,Citizen happiness,69,40,46,32,215.0001,11.0
+C08,1,Company data count,86,42,2,0,3.9715,1.9952
+C08,1,Household citizen count,75,42,9,1,17.9415,1.9998
+C08,1,Pathfinding target dequeue,3,1,0,0,0,0
+C08,1,Resource seller setup,900,466,580,560,2423.8291,17.022
+C08,1,Stock Apply,0,0,0,0,0,0
+C08,1,Coverage Clear,0,0,0,0,0,0
+C08,1,Coverage Prepare,0,0,0,0,0,0
+C08,1,Coverage Process,2,0,0,0,0,0
+C08,1,Coverage search setup,0,0,0,0,0,0
+C08,1,No recent readier sample,2641,,0,0,0,0
+C08,5,Other or unresolved activity,195,146,0,0,0,0
+C08,5,Replacement Apply,0,0,0,0,0,0
+C08,5,Other pathfinding dispatcher work,0,0,0,0,0,0
+C08,5,Coverage graph,0,0,0,0,0,0
+C08,5,Ordinary route,11,5,7,5,33.0349,8.0246
+C08,5,Availability,0,0,0,0,0,0
+C08,5,Coverage result conversion,2,1,0,0,0,0
+C08,5,Procedural rendering preparation,235,235,0,0,0,0
+C08,5,Citizen happiness,50,31,37,23,189.0088,11.0
+C08,5,Company data count,15,9,2,0,3.9715,1.9952
+C08,5,Household citizen count,42,21,5,0,9.973,1.9996
+C08,5,Pathfinding target dequeue,2,0,0,0,0,0
+C08,5,Resource seller setup,269,136,246,229,1528.9598,17.022
+C08,5,Stock Apply,0,0,0,0,0,0
+C08,5,Coverage Clear,0,0,0,0,0,0
+C08,5,Coverage Prepare,0,0,0,0,0,0
+C08,5,Coverage Process,0,0,0,0,0,0
+C08,5,Coverage search setup,0,0,0,0,0,0
+C08,5,No recent readier sample,1357,,0,0,0,0
+C08,16.7,Other or unresolved activity,18,14,0,0,0,0
+C08,16.7,Replacement Apply,0,0,0,0,0,0
+C08,16.7,Other pathfinding dispatcher work,0,0,0,0,0,0
+C08,16.7,Coverage graph,0,0,0,0,0,0
+C08,16.7,Ordinary route,0,0,0,0,0,0
+C08,16.7,Availability,0,0,0,0,0,0
+C08,16.7,Coverage result conversion,2,1,0,0,0,0
+C08,16.7,Procedural rendering preparation,13,13,0,0,0,0
+C08,16.7,Citizen happiness,0,0,0,0,0,0
+C08,16.7,Company data count,2,2,1,0,1.9952,1.9952
+C08,16.7,Household citizen count,3,1,0,0,0,0
+C08,16.7,Pathfinding target dequeue,0,0,0,0,0,0
+C08,16.7,Resource seller setup,9,5,8,5,89.0382,17.022
+C08,16.7,Stock Apply,0,0,0,0,0,0
+C08,16.7,Coverage Clear,0,0,0,0,0,0
+C08,16.7,Coverage Prepare,0,0,0,0,0,0
+C08,16.7,Coverage Process,0,0,0,0,0,0
+C08,16.7,Coverage search setup,0,0,0,0,0,0
+C08,16.7,No recent readier sample,120,,0,0,0,0
+C08,33.3,Other or unresolved activity,0,0,0,0,0,0
+C08,33.3,Replacement Apply,0,0,0,0,0,0
+C08,33.3,Other pathfinding dispatcher work,0,0,0,0,0,0
+C08,33.3,Coverage graph,0,0,0,0,0,0
+C08,33.3,Ordinary route,0,0,0,0,0,0
+C08,33.3,Availability,0,0,0,0,0,0
+C08,33.3,Coverage result conversion,0,0,0,0,0,0
+C08,33.3,Procedural rendering preparation,1,1,0,0,0,0
+C08,33.3,Citizen happiness,0,0,0,0,0,0
+C08,33.3,Company data count,1,1,1,0,1.9952,1.9952
+C08,33.3,Household citizen count,0,0,0,0,0,0
+C08,33.3,Pathfinding target dequeue,0,0,0,0,0,0
+C08,33.3,Resource seller setup,0,0,0,0,0,0
+C08,33.3,Stock Apply,0,0,0,0,0,0
+C08,33.3,Coverage Clear,0,0,0,0,0,0
+C08,33.3,Coverage Prepare,0,0,0,0,0,0
+C08,33.3,Coverage Process,0,0,0,0,0,0
+C08,33.3,Coverage search setup,0,0,0,0,0,0
+C08,33.3,No recent readier sample,9,,0,0,0,0
+C09,1,Other or unresolved activity,3385,2047,0,0,0,0
+C09,1,Replacement Apply,0,0,0,0,0,0
+C09,1,Other pathfinding dispatcher work,0,0,0,0,0,0
+C09,1,Coverage graph,37,13,11,9,70.0346,11.9848
+C09,1,Ordinary route,288,117,123,107,514.4333,14.0115
+C09,1,Availability,0,0,0,0,0,0
+C09,1,Coverage result conversion,9,4,3,0,8.9282,5.0
+C09,1,Procedural rendering preparation,947,946,0,0,0,0
+C09,1,Citizen happiness,263,136,159,129,802.9459,11.0236
+C09,1,Company data count,268,126,6,5,11.911,1.9973
+C09,1,Household citizen count,267,138,38,5,75.7315,2.0018
+C09,1,Pathfinding target dequeue,0,0,0,0,0,0
+C09,1,Resource seller setup,2469,1175,1738,1605,9211.6315,22.0462
+C09,1,Stock Apply,0,0,0,0,0,0
+C09,1,Coverage Clear,0,0,0,0,0,0
+C09,1,Coverage Prepare,0,0,0,0,0,0
+C09,1,Coverage Process,10,3,0,0,0,0
+C09,1,Coverage search setup,1,1,0,0,0,0
+C09,1,No recent readier sample,9828,,0,0,0,0
+C09,5,Other or unresolved activity,905,657,0,0,0,0
+C09,5,Replacement Apply,0,0,0,0,0,0
+C09,5,Other pathfinding dispatcher work,0,0,0,0,0,0
+C09,5,Coverage graph,12,6,9,7,64.0293,11.9848
+C09,5,Ordinary route,72,32,62,49,358.2918,14.0115
+C09,5,Availability,0,0,0,0,0,0
+C09,5,Coverage result conversion,8,4,3,0,8.9282,5.0
+C09,5,Procedural rendering preparation,738,737,0,0,0,0
+C09,5,Citizen happiness,155,81,115,88,686.0622,11.0236
+C09,5,Company data count,82,39,1,0,1.9808,1.9808
+C09,5,Household citizen count,174,93,30,0,59.9117,2.0018
+C09,5,Pathfinding target dequeue,0,0,0,0,0,0
+C09,5,Resource seller setup,1274,606,1113,988,7505.2736,22.0462
+C09,5,Stock Apply,0,0,0,0,0,0
+C09,5,Coverage Clear,0,0,0,0,0,0
+C09,5,Coverage Prepare,0,0,0,0,0,0
+C09,5,Coverage Process,0,0,0,0,0,0
+C09,5,Coverage search setup,1,1,0,0,0,0
+C09,5,No recent readier sample,5692,,0,0,0,0
+C09,16.7,Other or unresolved activity,101,85,0,0,0,0
+C09,16.7,Replacement Apply,0,0,0,0,0,0
+C09,16.7,Other pathfinding dispatcher work,0,0,0,0,0,0
+C09,16.7,Coverage graph,2,1,1,0,11.0196,11.0196
+C09,16.7,Ordinary route,1,0,0,0,0,0
+C09,16.7,Availability,0,0,0,0,0,0
+C09,16.7,Coverage result conversion,1,0,0,0,0,0
+C09,16.7,Procedural rendering preparation,75,75,0,0,0,0
+C09,16.7,Citizen happiness,0,0,0,0,0,0
+C09,16.7,Company data count,29,14,0,0,0,0
+C09,16.7,Household citizen count,12,7,4,0,7.9995,2.0004
+C09,16.7,Pathfinding target dequeue,0,0,0,0,0,0
+C09,16.7,Resource seller setup,45,27,40,27,521.299,22.0462
+C09,16.7,Stock Apply,0,0,0,0,0,0
+C09,16.7,Coverage Clear,0,0,0,0,0,0
+C09,16.7,Coverage Prepare,0,0,0,0,0,0
+C09,16.7,Coverage Process,0,0,0,0,0,0
+C09,16.7,Coverage search setup,1,1,0,0,0,0
+C09,16.7,No recent readier sample,886,,0,0,0,0
+C09,33.3,Other or unresolved activity,11,9,0,0,0,0
+C09,33.3,Replacement Apply,0,0,0,0,0,0
+C09,33.3,Other pathfinding dispatcher work,0,0,0,0,0,0
+C09,33.3,Coverage graph,0,0,0,0,0,0
+C09,33.3,Ordinary route,0,0,0,0,0,0
+C09,33.3,Availability,0,0,0,0,0,0
+C09,33.3,Coverage result conversion,0,0,0,0,0,0
+C09,33.3,Procedural rendering preparation,4,4,0,0,0,0
+C09,33.3,Citizen happiness,0,0,0,0,0,0
+C09,33.3,Company data count,4,2,0,0,0,0
+C09,33.3,Household citizen count,0,0,0,0,0,0
+C09,33.3,Pathfinding target dequeue,0,0,0,0,0,0
+C09,33.3,Resource seller setup,1,1,0,0,0,0
+C09,33.3,Stock Apply,0,0,0,0,0,0
+C09,33.3,Coverage Clear,0,0,0,0,0,0
+C09,33.3,Coverage Prepare,0,0,0,0,0,0
+C09,33.3,Coverage Process,0,0,0,0,0,0
+C09,33.3,Coverage search setup,1,1,0,0,0,0
+C09,33.3,No recent readier sample,59,,0,0,0,0

@@ -52,6 +52,10 @@ internal static class FailurePathTests
         catch(Exception error) { failures.Add(new Exception("Preflight lifetime",error)); }
         try { FailedStartupCleanup(); }
         catch(Exception error) { failures.Add(new Exception("Failed startup cleanup",error)); }
+        try { CheckedInactivePanel(); }
+        catch(Exception error) { failures.Add(new Exception("Checked-inactive Options",error)); }
+        try { OptionalLoadEvent(); }
+        catch(Exception error) { failures.Add(new Exception("Optional load event cleanup",error)); }
         try { VanillaFailure(); }
         catch(Exception error) { failures.Add(new Exception("Vanilla scheduling failure",error)); }
         for(int mask=0;mask<16;mask++)
@@ -60,7 +64,7 @@ internal static class FailurePathTests
             catch(Exception error) { failures.Add(new Exception($"Unload failure mask {mask}",error)); }
         }
         if(failures.Count!=0)throw new AggregateException("Failure-path regressions",failures);
-        Console.WriteLine("PASS: synchronous preflight lifetime, partial startup rollback, duplicate load isolation, reporting/formatting failures preserve one vanilla job and its dependency; vanilla scheduling errors propagate; all 16 unload-failure combinations preserve errors, counter lifetime, and retryable cleanup.");
+        Console.WriteLine("PASS: synchronous preflight lifetime, partial startup rollback, duplicate load isolation, checked-inactive Options, optional event cleanup and retry, reporting/formatting failures preserve one vanilla job and its dependency; vanilla scheduling errors propagate; all 16 unload-failure combinations preserve errors, counter lifetime, and retryable cleanup.");
     }
 
     private static void ReportingFailure(int scenario)
@@ -163,6 +167,67 @@ internal static class FailurePathTests
         }
         Check(!harmony.Patched&&harmony.UnpatchCalls==2,
             "Failed startup lost the Harmony handle needed to retry unpatching");
+    }
+
+    private static void CheckedInactivePanel()
+    {
+        // The runtime adapter has no ServiceCoverageSystem type. The production
+        // gate must explain this rejection before touching any Unity worker data.
+        var mod = new Mod();
+        var manager = GameManager.instance;
+        var locales = manager.localizationManager.Sources;
+        int previousLocaleCount = locales.Count;
+        mod.OnLoad(new Game.UpdateSystem());
+        try
+        {
+            Check(mod.IsOwner && Mod.CompatibilityInactiveReason?.Contains("ServiceCoverageSystem is missing.") == true,
+                "Gate rejection lost its explanation");
+            var status = Mod.GetRuntimeStatus();
+            Check(!status.Installed && status.Scheduled == 0 && status.Fallbacks == 0 && AllocationTracker.Live == 0,
+                "An inactive load retained earlier counters or allocated worker memory");
+            Check(locales.Count == previousLocaleCount + 1 && manager.LoadSubscribers == 0,
+                "Inactive registration did not isolate the panel from game events");
+            var duplicate = new Mod();
+            duplicate.OnLoad(new Game.UpdateSystem());
+            duplicate.OnDispose();
+            Check(mod.IsOwner && locales.Count == previousLocaleCount + 1,
+                "Duplicate inactive load changed the active panel");
+        }
+        finally { mod.OnDispose(); }
+        Check(!mod.IsOwner && Mod.CompatibilityInactiveReason == null && locales.Count == previousLocaleCount,
+            "Inactive panel leaked its reason, ownership or localization");
+    }
+
+    private static void OptionalLoadEvent()
+    {
+        var manager = new GameManager();
+        var owner = typeof(Mod).GetField("_owner", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var mod = new Mod();
+        owner.SetValue(null, mod);
+        manager.LoadEventUnavailable = true;
+        try
+        {
+            try { mod.TrackGameLoads(manager); throw new Exception("Unavailable event registration succeeded"); }
+            catch (MissingMethodException) { }
+            mod.OnDispose();
+            Check(!mod.IsOwner && manager.LoadRemoveCalls == 0,
+                "An unregistered optional event blocked unload");
+            owner.SetValue(null, mod);
+            manager.LoadEventUnavailable = false;
+            mod.TrackGameLoads(manager);
+            manager.LoadEventUnavailable = true;
+            try { mod.OnDispose(); throw new Exception("Failed event removal was lost"); }
+            catch (AggregateException e) when (e.InnerException is MissingMethodException) { }
+            Check(mod.IsOwner && manager.LoadSubscribers == 1,
+                "Failed event cleanup lost its registration");
+        }
+        finally
+        {
+            manager.LoadEventUnavailable = false;
+            mod.OnDispose();
+        }
+        Check(!mod.IsOwner && manager.LoadRemoveCalls == 2 && manager.LoadSubscribers == 0,
+            "Optional event cleanup could not be retried");
     }
 
     private static void VanillaFailure()
