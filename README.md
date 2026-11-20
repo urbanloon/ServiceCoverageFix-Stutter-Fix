@@ -1,4 +1,4 @@
-# Service Coverage Fix 0.3.2 — Hardened Performance Test
+# Service Coverage Stutter Fix
 
 This Cities: Skylines II code mod replaces the pathological final merge in
 `Game.Simulation.ServiceCoverageSystem.ApplyCoverageJob`. The original game
@@ -113,8 +113,8 @@ Harmony 2.2.2 is packaged privately.
    `Enabled ServiceCoverageFix 0.3.2.0 record-local byte-radix hardened build`
 
 4. Test Loon Lake or Providence Bay stationary at 1× for at least 45 seconds.
-5. Do not publish this over a stable build until its Release/Burst build and an
-   extended live test have been verified.
+5. Before publishing changes, run the reference tests, produce a Release/Burst
+   build, and complete an extended in-game simulation test.
 
 `ANALYSIS.md` records the native attribution and trace evidence.
 `tests/reference_model.py` validates the exact selector sequence and structural
